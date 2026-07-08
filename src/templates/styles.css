@@ -1,133 +1,203 @@
-/* ═══════════════ JATS2PDF 默认样式表 ═══════════════ */
+/* ═══════════════════════════════════════════════
+   JATS2PDF — Elsevier 期刊风格样式表
+   参考: Expert Systems with Applications
+   设计: 单栏学术期刊排版
+   ═══════════════════════════════════════════════ */
 
-/* ── 页面设置 (CSS Paged Media) ── */
+/* ── 页面设置 ── */
 @page {
   size: A4;
-  margin: 2.5cm 2cm 2.5cm 2cm;
+  margin: 2cm 2cm 2.5cm 2cm;
 
-  @top-center {
-    content: string(heading);
-    font-size: 9pt;
-    color: #666;
+  /* 页眉：左侧期刊名，右侧页码（Elsevier风格） */
+  @top-left {
+    content: string(journal-name);
+    font-family: "Times New Roman", "Noto Serif CJK SC", serif;
+    font-size: 8pt;
+    font-style: italic;
+    color: #444;
+  }
+
+  @top-right {
+    content: counter(page);
+    font-family: "Times New Roman", "Noto Serif CJK SC", serif;
+    font-size: 8pt;
+    color: #444;
   }
 
   @bottom-center {
-    content: counter(page);
-    font-size: 9pt;
-    color: #666;
-  }
-}
-
-@page :first {
-  @top-center {
     content: none;
   }
 }
 
-/* ── 全局排版 ── */
-body {
-  font-family: "Noto Serif CJK SC", "SimSun", "Times New Roman", serif;
-  font-size: 12pt;
-  line-height: 1.8;
-  color: #222;
-  text-align: justify;
+/* 首页不显示页眉 */
+@page :first {
+  @top-left  { content: none; }
+  @top-right { content: none; }
 }
 
-/* ── 标题页 ── */
+/* ── 全局排版 ── */
+body {
+  font-family: "Times New Roman", "Noto Serif CJK SC", "SimSun", serif;
+  font-size: 10pt;
+  line-height: 1.6;
+  color: #000;
+  text-align: justify;
+  hyphens: auto;
+}
+
+/* ═══════════════ 标题区（Elsevier风格） ═══════════════ */
 .article-header {
   text-align: center;
-  margin-bottom: 3em;
-  padding-bottom: 2em;
-  border-bottom: 2px solid #333;
+  margin-bottom: 2em;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .article-title {
-  font-size: 20pt;
+  font-family: "Times New Roman", "Noto Serif CJK SC", serif;
+  font-size: 16pt;
   font-weight: bold;
-  margin-bottom: 0.3em;
+  margin-bottom: 0.8em;
   line-height: 1.3;
+  color: #000;
 }
 
 .article-subtitle {
-  font-size: 14pt;
+  font-size: 12pt;
   font-weight: normal;
-  color: #555;
+  color: #333;
   margin-bottom: 1.5em;
 }
 
+/* 作者区 */
 .authors {
-  font-size: 11pt;
-  margin: 1em 0;
+  font-size: 10pt;
+  margin: 1em 0 0.5em 0;
+  line-height: 1.8;
 }
 
-.author { white-space: nowrap; }
-.author-email { font-size: 9pt; color: #666; }
+.author {
+  white-space: nowrap;
+}
+
+.author sup {
+  font-size: 7pt;
+  color: #0066cc;
+}
+
+.author-email {
+  display: block;
+  font-size: 8pt;
+  color: #555;
+  margin-top: 0.2em;
+}
 
 .orcid {
   color: #a6ce39;
   text-decoration: none;
-  font-size: 8pt;
+  font-size: 7pt;
 }
 
+/* 期刊名 */
 .journal-name {
-  font-size: 14pt;
+  font-family: "Times New Roman", serif;
+  font-size: 12pt;
   font-style: italic;
-  margin-top: 0.5em;
-  color: #555;
+  margin-top: 0.3em;
+  margin-bottom: 0.5em;
+  color: #333;
+  string-set: journal-name content();
 }
 
+/* DOI行 */
 .doi {
-  font-size: 9pt;
-  color: #888;
+  font-size: 8pt;
+  color: #777;
   margin-top: 0.5em;
 }
 
-/* ── 摘要 ── */
+/* ═══════════════ 摘要（Elsevier缩进风格） ═══════════════ */
 .abstract {
-  margin: 1.5em 1em;
-  padding: 0.8em 1em;
-  border-left: 3px solid #555;
-  background: #f9f9f9;
+  margin: 1.5em 2em;
+  padding: 0;
+  border-left: none;
+  background: none;
 }
 
 .abstract h2 {
-  font-size: 12pt;
+  font-size: 10pt;
+  font-weight: bold;
+  margin-bottom: 0.3em;
   margin-top: 0;
+  text-transform: none;
 }
 
 .abstract p {
-  font-size: 10.5pt;
+  font-size: 9.5pt;
   text-indent: 0;
+  line-height: 1.5;
+  margin: 0;
 }
 
-/* ── 关键词 ── */
+/* ═══════════════ 关键词 ═══════════════ */
 .keywords {
-  font-size: 10pt;
-  margin: 0 1em 2em 1em;
-  color: #444;
+  font-size: 9.5pt;
+  margin: 0.5em 2em 2em 2em;
+  color: #000;
 }
 
-/* ── 正文章节 ── */
-.section {
-  margin-top: 1.2em;
-}
-
-.section-title {
+.keywords strong {
   font-weight: bold;
-  margin-top: 1.5em;
+}
+
+/* ═══════════════ 正文章节（Elsevier编号风格） ═══════════════ */
+.section {
+  margin-top: 0.8em;
+}
+
+/* 一级标题 — 如 "1. Introduction" */
+.level-1 > .section-title {
+  font-family: "Times New Roman", "Noto Serif CJK SC", serif;
+  font-size: 11pt;
+  font-weight: bold;
+  margin-top: 1.8em;
   margin-bottom: 0.5em;
+  text-align: left;
 }
 
-.level-1 > .section-title { font-size: 14pt; }
-.level-2 > .section-title { font-size: 12pt; }
-.level-3 > .section-title { font-size: 11pt; font-style: italic; }
+/* 二级标题 — 如 "1.1. Background" */
+.level-2 > .section-title {
+  font-family: "Times New Roman", "Noto Serif CJK SC", serif;
+  font-size: 10pt;
+  font-weight: bold;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
+  text-align: left;
+}
 
+/* 三级标题 */
+.level-3 > .section-title {
+  font-family: "Times New Roman", "Noto Serif CJK SC", serif;
+  font-size: 10pt;
+  font-weight: bold;
+  font-style: italic;
+  margin-top: 1em;
+  margin-bottom: 0.3em;
+  text-align: left;
+}
+
+/* 正文段落 */
 p {
-  text-indent: 2em;
-  margin: 0.5em 0;
+  text-indent: 0;
+  margin: 0.4em 0;
+  font-size: 10pt;
+  line-height: 1.6;
 }
 
-/* ── 图表 ── */
+/* ═══════════════ 图表 ═══════════════ */
+
+/* 图：题注在下方 */
 .figure {
   text-align: center;
   margin: 1.5em 0;
@@ -139,97 +209,145 @@ p {
   height: auto;
 }
 
-.figure figcaption,
-.fig-label,
-.tbl-label {
-  font-size: 9pt;
-  color: #444;
+.figure figcaption {
+  font-size: 8.5pt;
+  color: #000;
   margin-top: 0.3em;
+  text-align: left;
 }
+
+.fig-label {
+  font-weight: bold;
+}
+
+/* ═══════════════ 表格（三线表风格） ═══════════════ */
 
 .table-wrap {
   margin: 1.5em 0;
   page-break-inside: avoid;
 }
 
+/* 题注在表上方（Elsevier规范） */
+.table-caption {
+  font-size: 8.5pt;
+  color: #000;
+  margin-bottom: 0.3em;
+  text-align: left;
+}
+
+.tbl-label {
+  font-weight: bold;
+}
+
+/* 三线表：只有顶线、表头底线、底线 */
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 9pt;
+  font-size: 8.5pt;
   margin: 0 auto;
+  border-top: 2px solid #000;       /* 顶线（粗） */
+  border-bottom: 2px solid #000;    /* 底线（粗） */
+}
+
+.data-table thead {
+  border-bottom: 1px solid #000;    /* 表头底线（细） */
 }
 
 .data-table th {
-  background: #eee;
   font-weight: bold;
-  border: 1px solid #999;
-  padding: 4px 6px;
+  padding: 5px 8px;
+  text-align: left;
+  border: none;                      /* 无竖线 */
+  background: none;
 }
 
 .data-table td {
-  border: 1px solid #ccc;
-  padding: 3px 6px;
+  padding: 4px 8px;
+  text-align: left;
+  border: none;                      /* 无竖线 */
 }
 
-.table-caption {
-  text-align: center;
-  font-size: 9pt;
+.data-table tbody tr {
+  border: none;                      /* 无横线 */
+}
+
+/* 表注（表格下方说明） */
+.table-note {
+  font-size: 8pt;
+  color: #555;
   margin-top: 0.3em;
+  text-align: left;
 }
 
-/* ── 公式 ── */
+/* ═══════════════ 公式 ═══════════════ */
+
 .formula-wrap {
-  margin: 1.5em 0;
+  margin: 1.2em 0;
   text-align: center;
 }
 
+/* 公式编号右对齐（Elsevier风格） */
 .formula-label {
   font-size: 10pt;
-  margin-top: 0.3em;
+  text-align: right;
+  margin-top: 0.2em;
 }
 
-/* ── 参考文献 ── */
+/* ═══════════════ 参考文献（Elsevier编号+悬挂缩进） ═══════════════ */
+
 .references {
   margin-top: 2em;
   padding-top: 1em;
-  border-top: 1px solid #999;
-  page-break-before: always;
+  border-top: 1px solid #000;
 }
 
+/* "References" 大标题 */
 .references h2 {
-  font-size: 14pt;
-  margin-bottom: 0.5em;
+  font-family: "Times New Roman", "Noto Serif CJK SC", serif;
+  font-size: 11pt;
+  font-weight: bold;
+  margin-bottom: 1em;
 }
 
 .references ol {
-  font-size: 9pt;
-  line-height: 1.6;
+  font-size: 8.5pt;
+  line-height: 1.5;
+  padding-left: 2em;
+  list-style-type: none;
+  counter-reset: ref-counter;
 }
 
+/* 编号 + 悬挂缩进 */
 .reference-item {
-  margin-bottom: 0.3em;
+  margin-bottom: 0.4em;
+  text-indent: -1.5em;
+  padding-left: 1.5em;
+  counter-increment: ref-counter;
+}
+
+.reference-item::before {
+  content: "[" counter(ref-counter) "] ";
+  font-weight: normal;
 }
 
 .ref-doi {
   color: #0066cc;
   font-size: 8pt;
+  word-break: break-all;
 }
 
-/* ── 双栏模式（可选） ── */
-@media print and (min-width: 500px) {
-  /* 取消注释以下内容以启用双栏：
-  .article-body {
-    column-count: 2;
-    column-gap: 1.5em;
-  }
-  */
-}
+/* ═══════════════ 分页控制 ═══════════════ */
 
-/* ── 分页控制 ── */
 h1, h2, h3, h4 {
   page-break-after: avoid;
 }
 
 .figure, .table-wrap, .formula-wrap {
   page-break-inside: avoid;
+}
+
+/* 段落间避免孤行 */
+p {
+  orphans: 2;
+  widows: 2;
 }
