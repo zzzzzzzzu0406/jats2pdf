@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>{{ article.title or "学术论文" }}</title>
+<meta name="generator" content="JATS2PDF">
+<!-- MathJax 用于公式渲染 -->
+<script>
+MathJax = {
+  tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+<body>
+
+<!-- ═══════════════ 封面/标题页 ═══════════════ -->
+<header class="article-header">
+  <h1 class="article-title">{{ article.title }}</h1>
+  {% if article.subtitle %}
+  <h2 class="article-subtitle">{{ article.subtitle }}</h2>
+  {% endif %}
+
+  {% if has_authors %}
+  <div class="authors">
+    {% for author in article.authors %}
+    <span class="author">
+      {{ author.given_name }} {{ author.surname }}
+      {% if author.orcid %}
+      <sup><a href="{{ author.orcid | orcid_url }}" class="orcid">ORCID</a></sup>
+      {% endif %}
+      {% if author.email %}
+      <span class="author-email">✉ {{ author.email }}</span>
+      {% endif %}
+      {% if not loop.last %}, {% endif %}
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if article.journal %}
+  <div class="journal-name">{{ article.journal }}</div>
+  {% endif %}
+
+  {% if article.doi %}
+  <div class="doi">DOI: <a href="https://doi.org/{{ article.doi }}">{{ article.doi }}</a></div>
+  {% endif %}
+</header>
+
+<!-- ═══════════════ 摘要 ═══════════════ -->
+{% if article.abstract %}
+<section class="abstract">
+  <h2>摘要</h2>
+  <p>{{ article.abstract }}</p>
+</section>
+{% endif %}
+
+<!-- ═══════════════ 关键词 ═══════════════ -->
+{% if has_keywords %}
+<section class="keywords">
+  <strong>关键词：</strong>
+  {{ article.keywords | join("；") }}
+</section>
+{% endif %}
+
+<!-- ═══════════════ 正文 ═══════════════ -->
+<main class="article-body">
+  {% macro render_section(section) %}
+  <section class="section level-{{ section.level }}">
+    <h{{ section.level + 1 }} class="section-title">{{ section.title }}</h{{ section.level + 1 }}>
+
+    {% for para in section.paragraphs %}
+    <p>{{ para }}</p>
+    {% endfor %}
+
+    {# 图表 #}
+    {% for fig in section.figures %}
+    <figure id="{{ fig.id }}" class="figure">
+      {% if fig.graphic_href %}
+      <img src="{{ fig.graphic_href }}" alt="{{ fig.caption }}">
+      {% endif %}
+      <figcaption>
+        <span class="fig-label">{{ fig.label }}</span>
+        {{ fig.caption }}
+      </figcaption>
+    </figure>
+    {% endfor %}
+
+    {# 表格 #}
+    {% for tbl in section.tables %}
+    <div class="table-wrap" id="{{ tbl.id }}">
+      <table class="data-table">
+        {% if tbl.headers %}
+        <thead>
+          <tr>
+            {% for h in tbl.headers %}
+            <th>{{ h }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        {% endif %}
+        <tbody>
+          {% for row in tbl.rows %}
+          <tr>
+            {% for cell in row %}
+            <td>{{ cell }}</td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="table-caption">
+        <span class="tbl-label">{{ tbl.label }}</span> {{ tbl.caption }}
+      </p>
+    </div>
+    {% endfor %}
+
+    {# 公式 #}
+    {% for fm in section.formulas %}
+    <div class="formula-wrap" id="{{ fm.id }}">
+      {% if fm.mathml %}
+      {{ fm.mathml | safe }}
+      {% elif fm.latex %}
+      <div class="formula">$${{ fm.latex }}$$</div>
+      {% endif %}
+      {% if fm.label %}
+      <p class="formula-label">{{ fm.label }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {# 递归渲染子章节 #}
+    {% for sub in section.subsections %}
+    {{ render_section(sub) }}
+    {% endfor %}
+  </section>
+  {% endmacro %}
+
+  {% for section in article.sections %}
+  {{ render_section(section) }}
+  {% endfor %}
+</main>
+
+<!-- ═══════════════ 参考文献 ═══════════════ -->
+{% if has_references %}
+<section class="references">
+  <h2>参考文献</h2>
+  <ol>
+    {% for ref in article.references %}
+    <li id="{{ ref.id }}" class="reference-item">
+      {% if ref.authors %}{{ ref.authors }}. {% endif %}
+      {% if ref.title %}"{{ ref.title }}." {% endif %}
+      {% if ref.journal %}<em>{{ ref.journal }}</em>{% endif %}
+      {% if ref.volume %}, {{ ref.volume }}{% endif %}
+      {% if ref.issue %}({{ ref.issue }}){% endif %}
+      {% if ref.pages %}: {{ ref.pages }}{% endif %}
+      {% if ref.year %} ({{ ref.year }}){% endif %}.
+      {% if ref.doi %}
+      <a href="https://doi.org/{{ ref.doi }}" class="ref-doi">doi:{{ ref.doi }}</a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+</body>
+</html>

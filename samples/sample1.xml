@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Publishing DTD v1.1 20151215//EN" "https://jats.nlm.nih.gov/publishing/1.1/JATS-journalpublishing1.dtd">
+<article xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:mml="http://www.w3.org/1998/Math/MathML">
+  <front>
+    <journal-meta>
+      <journal-title-group>
+        <journal-title>计算机学报</journal-title>
+      </journal-title-group>
+    </journal-meta>
+    <article-meta>
+      <article-id pub-id-type="doi">10.1234/sample.2024.001</article-id>
+      <title-group>
+        <article-title>基于深度学习的学术文档结构智能识别方法研究</article-title>
+        <subtitle>一种融合LayoutLM与图神经网络的混合架构</subtitle>
+      </title-group>
+      <contrib-group>
+        <contrib contrib-type="author">
+          <contrib-id contrib-id-type="orcid">0000-0001-2345-6789</contrib-id>
+          <name>
+            <surname>张</surname>
+            <given-names>三</given-names>
+          </name>
+          <email>zhangsan@university.edu.cn</email>
+        </contrib>
+        <contrib contrib-type="author">
+          <contrib-id contrib-id-type="orcid">0000-0002-3456-7890</contrib-id>
+          <name>
+            <surname>李</surname>
+            <given-names>四</given-names>
+          </name>
+          <email>lisi@university.edu.cn</email>
+        </contrib>
+      </contrib-group>
+      <abstract>
+        <p>学术文档结构识别是文献数字化中的关键任务。本文提出了一种融合LayoutLM与图神经网络的混合架构，用于自动识别学术论文中的章节标题、段落、公式、图表和参考文献等结构元素。在构建的中文学术论文数据集上，该方法在标题层级识别任务中达到96.3%的F1分数，在公式定位任务中达到94.7%的准确率。实验结果表明，图神经网络能有效捕捉文档元素间的空间关系，显著提升了版面分析的鲁棒性。</p>
+      </abstract>
+      <kwd-group>
+        <kwd>文档结构识别</kwd>
+        <kwd>LayoutLM</kwd>
+        <kwd>图神经网络</kwd>
+        <kwd>学术文档</kwd>
+        <kwd>版面分析</kwd>
+      </kwd-group>
+    </article-meta>
+  </front>
+
+  <body>
+    <sec id="s1">
+      <title>引言</title>
+      <p>随着学术产出的快速增长，海量学术文献的数字化和结构化成为研究热点。传统的文档处理依赖人工标注和基于规则的方法，难以应对多样化的排版格式。近年来，预训练语言模型和视觉-语言联合模型的发展为文档智能理解开辟了新路径。</p>
+      <p>本文提出了一种融合LayoutLM与图神经网络（GNN）的混合架构，充分利用LayoutLM的跨模态表征能力和GNN的结构关系建模优势。主要贡献包括：（1）设计了一个端到端的学术文档结构识别流水线；（2）提出了基于GNN的文档元素关系建模方法；（3）构建了大规模中文学术论文标注数据集。</p>
+    </sec>
+
+    <sec id="s2">
+      <title>相关工作</title>
+      <sec id="s2.1">
+        <title>基于深度学习的文档分析</title>
+        <p>近年来，文档分析领域经历了从规则驱动到数据驱动的范式转变。LayoutLM系列模型通过联合建模文本和布局信息，在多种文档理解任务上取得了优异表现。LayoutLMv3进一步引入了图像patch作为输入，实现了文本、布局和视觉三模态的统一建模。</p>
+      </sec>
+      <sec id="s2.2">
+        <title>图神经网络在文档分析中的应用</title>
+        <p>图神经网络天然适合建模文档元素之间的空间和语义关系。现有方法通常将文档元素（文本框、段落、表格等）视为图中的节点，通过定义距离、对齐等关系来构造边，然后使用GCN或GAT进行消息传递。</p>
+      </sec>
+    </sec>
+
+    <sec id="s3">
+      <title>方法</title>
+      <sec id="s3.1">
+        <title>整体架构</title>
+        <p>本文提出的混合架构由三个核心模块组成：文档编码模块、结构关系建模模块和序列标注模块。文档编码模块使用LayoutLMv3提取每个token级别的多模态特征；结构关系建模模块将文档元素组织为图结构，通过多层GAT进行特征增强；序列标注模块使用条件随机场（CRF）进行全局最优标签序列的解码。</p>
+      </sec>
+      <sec id="s3.2">
+        <title>图构建策略</title>
+        <p>我们将每个文档元素（段落、标题、公式、图表、表格）作为图节点。边的构建遵循三种策略：空间邻近（距离小于阈值δ的节点连边）、视觉对齐（水平或垂直对齐的节点连边）和阅读顺序（按阅读顺序相邻的节点连边）。</p>
+        <p>公式如下所示：</p>
+        <disp-formula id="eq1">
+          <label>（1）</label>
+          <mml:math>
+            <mml:mrow>
+              <mml:msub><mml:mi>h</mml:mi><mml:mi>i</mml:mi></mml:msub>
+              <mml:mo>=</mml:mo>
+              <mml:mi>σ</mml:mi>
+              <mml:mrow>
+                <mml:mo>(</mml:mo>
+                <mml:mrow>
+                  <mml:munder><mml:mo>∑</mml:mo><mml:mi>j∈N(i)</mml:mi></mml:munder>
+                  <mml:mrow>
+                    <mml:msub><mml:mi>α</mml:mi><mml:mi>ij</mml:mi></mml:msub>
+                    <mml:mi>W</mml:mi>
+                    <mml:msub><mml:mi>h</mml:mi><mml:mi>j</mml:mi></mml:msub>
+                  </mml:mrow>
+                </mml:mrow>
+                <mml:mo>)</mml:mo>
+              </mml:mrow>
+            </mml:mrow>
+          </mml:math>
+        </disp-formula>
+        <p>其中h_i表示节点i的特征表示，N(i)为节点i的邻居集合，α_ij为注意力系数，W为可学习的权重矩阵。</p>
+      </sec>
+    </sec>
+
+    <sec id="s4">
+      <title>实验</title>
+      <sec id="s4.1">
+        <title>数据集</title>
+        <p>我们从知网（CNKI）和万方数据库中收集了5,000篇中文学术论文，涵盖计算机科学、电子工程、数学、物理学和生物学五个学科。每篇论文由三位标注者独立标注，取两人以上一致的标注作为最终结果。</p>
+        <table-wrap id="t1">
+          <label>表1</label>
+          <caption>
+            <title>数据集统计信息</title>
+          </caption>
+          <table>
+            <thead>
+              <tr><th>学科</th><th>论文数</th><th>平均页数</th><th>平均章节数</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>计算机科学</td><td>1,200</td><td>8.5</td><td>5.2</td></tr>
+              <tr><td>电子工程</td><td>980</td><td>7.8</td><td>4.8</td></tr>
+              <tr><td>数学</td><td>1,050</td><td>10.2</td><td>6.1</td></tr>
+              <tr><td>物理学</td><td>890</td><td>9.1</td><td>5.5</td></tr>
+              <tr><td>生物学</td><td>880</td><td>9.8</td><td>5.9</td></tr>
+            </tbody>
+          </table>
+        </table-wrap>
+      </sec>
+      <sec id="s4.2">
+        <title>实验结果</title>
+        <p>我们在测试集上评估了所提方法在各项任务上的性能。实验结果表明，融合GNN后，标题层级识别的F1分数从93.1%提升至96.3%，公式定位的准确率从89.2%提升至94.7%。</p>
+      </sec>
+    </sec>
+
+    <sec id="s5">
+      <title>结论</title>
+      <p>本文提出了一种融合LayoutLM与图神经网络的学术文档结构识别方法。实验表明，GNN能有效建模文档元素间的空间和语义关系，显著提升结构识别的准确性。未来的工作将探索将本方法扩展到更多语言和文档类型。</p>
+    </sec>
+  </body>
+
+  <back>
+    <ref-list>
+      <title>参考文献</title>
+      <ref id="r1">
+        <element-citation publication-type="journal">
+          <person-group person-group-type="author">
+            <name><surname>Xu</surname><given-names>Y</given-names></name>
+            <name><surname>Li</surname><given-names>M</given-names></name>
+          </person-group>
+          <article-title>LayoutLM: Pre-training of Text and Layout for Document Image Understanding</article-title>
+          <source>Proceedings of KDD</source>
+          <year>2020</year>
+          <volume>1</volume>
+          <fpage>1192</fpage>
+          <lpage>1200</lpage>
+          <pub-id pub-id-type="doi">10.1145/3394486.3403172</pub-id>
+        </element-citation>
+      </ref>
+      <ref id="r2">
+        <element-citation publication-type="journal">
+          <person-group person-group-type="author">
+            <name><surname>Huang</surname><given-names>Y</given-names></name>
+            <name><surname>Lv</surname><given-names>T</given-names></name>
+          </person-group>
+          <article-title>LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking</article-title>
+          <source>Proceedings of ACM Multimedia</source>
+          <year>2022</year>
+          <volume>1</volume>
+          <fpage>4083</fpage>
+          <lpage>4091</lpage>
+          <pub-id pub-id-type="doi">10.1145/3503161.3548397</pub-id>
+        </element-citation>
+      </ref>
+      <ref id="r3">
+        <element-citation publication-type="journal">
+          <person-group person-group-type="author">
+            <name><surname>Veličković</surname><given-names>P</given-names></name>
+          </person-group>
+          <article-title>Graph Attention Networks</article-title>
+          <source>ICLR</source>
+          <year>2018</year>
+        </element-citation>
+      </ref>
+    </ref-list>
+  </back>
+</article>
