@@ -3,55 +3,91 @@
 <head>
 <meta charset="UTF-8">
 <title>{{ article.title or "学术论文" }}</title>
-<meta name="generator" content="JATS2PDF">
-<!-- MathJax 用于公式渲染 -->
+<meta name="generator" content="JATS2PDF v2.0">
+<!--
+  ═══════════════════════════════════════════════
+  JATS2PDF — 学术期刊智能排版模板
+  选题2: JATS XML → PDF 自动排版
+  支持: 中英双语 / 单栏双栏 / MathML公式
+  ═══════════════════════════════════════════════
+-->
+
+<!-- MathJax 3.x：公式渲染引擎 -->
 <script>
 MathJax = {
-  tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] },
-  svg: { fontCache: 'global' }
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    processEscapes: true
+  },
+  svg: {
+    fontCache: 'global',
+    scale: 1.0
+  },
+  mml: {
+    parseAs: 'xml'
+  },
+  options: {
+    enableMenu: false,       /* 禁用右键菜单 */
+    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+  }
 };
 </script>
-<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-svg.js" async></script>
 </head>
+
+<!--
+  布局切换:
+  - 默认: 单栏
+  - <body class="two-column"> : 双栏（正文双栏，摘要/图表跨栏）
+-->
 <body>
 
-<!-- ═══════════════ 封面/标题页 ═══════════════ -->
+<!-- ═══════════════ 标题页 ═══════════════ -->
 <header class="article-header">
-  <h1 class="article-title">{{ article.title }}</h1>
-  {% if article.subtitle %}
-  <h2 class="article-subtitle">{{ article.subtitle }}</h2>
+
+  {# 期刊名 #}
+  {% if article.journal %}
+  <div class="journal-name">{{ article.journal }}</div>
   {% endif %}
 
+  {# 论文标题 #}
+  <h1 class="article-title">{{ article.title }}</h1>
+
+  {% if article.subtitle %}
+  <p class="article-subtitle">{{ article.subtitle }}</p>
+  {% endif %}
+
+  {# 作者列表 + 机构上标 #}
   {% if has_authors %}
   <div class="authors">
     {% for author in article.authors %}
     <span class="author">
-      {{ author.given_name }} {{ author.surname }}
+      {{ author.given_name }}{{ author.surname }}
       {% if author.orcid %}
       <sup><a href="{{ author.orcid | orcid_url }}" class="orcid">ORCID</a></sup>
       {% endif %}
       {% if author.email %}
-      <span class="author-email">✉ {{ author.email }}</span>
+      <span class="author-email">{{ author.email }}</span>
       {% endif %}
-      {% if not loop.last %}, {% endif %}
+      {% if not loop.last %}<span>, </span>{% endif %}
     </span>
     {% endfor %}
   </div>
   {% endif %}
 
-  {% if article.journal %}
-  <div class="journal-name">{{ article.journal }}</div>
-  {% endif %}
-
+  {# DOI #}
   {% if article.doi %}
-  <div class="doi">DOI: <a href="https://doi.org/{{ article.doi }}">{{ article.doi }}</a></div>
+  <div class="doi">
+    DOI: <a href="https://doi.org/{{ article.doi }}">{{ article.doi }}</a>
+  </div>
   {% endif %}
 </header>
 
 <!-- ═══════════════ 摘要 ═══════════════ -->
 {% if article.abstract %}
 <section class="abstract">
-  <h2>摘要</h2>
+  <h2>摘　要</h2>
   <p>{{ article.abstract }}</p>
 </section>
 {% endif %}
@@ -59,70 +95,73 @@ MathJax = {
 <!-- ═══════════════ 关键词 ═══════════════ -->
 {% if has_keywords %}
 <section class="keywords">
-  <strong>关键词：</strong>
-  {{ article.keywords | join("；") }}
+  <strong>关键词：</strong>{{ article.keywords | join("；") }}
 </section>
 {% endif %}
 
 <!-- ═══════════════ 正文 ═══════════════ -->
 <main class="article-body">
-  {% macro render_section(section) %}
-  <section class="section level-{{ section.level }}">
-    <h{{ section.level + 1 }} class="section-title">{{ section.title }}</h{{ section.level + 1 }}>
 
+{% macro render_section(section, counter_prefix="") %}
+  {# 计算当前章节编号 #}
+  {% set sec_num = counter_prefix ~ (loop.index if loop else "1") %}
+
+  <section class="section level-{{ section.level }}" id="sec-{{ sec_num }}">
+
+    {# 章节标题（带自动编号） #}
+    <h{{ section.level + 1 }} class="section-title">
+      {{ sec_num }}&ensp;{{ section.title }}
+    </h{{ section.level + 1 }}>
+
+    {# 正文段落（首行缩进2字符） #}
     {% for para in section.paragraphs %}
     <p>{{ para }}</p>
     {% endfor %}
 
-    {# 图表 #}
+    {# ── 图表 ── #}
     {% for fig in section.figures %}
-    <figure id="{{ fig.id }}" class="figure">
+    <figure class="figure" id="{{ fig.id }}">
       {% if fig.graphic_href %}
       <img src="{{ fig.graphic_href }}" alt="{{ fig.caption }}">
       {% endif %}
       <figcaption>
-        <span class="fig-label">{{ fig.label }}</span>
-        {{ fig.caption }}
+        <span class="fig-label">{{ fig.label }}</span>&ensp;{{ fig.caption }}
       </figcaption>
     </figure>
     {% endfor %}
 
-    {# 表格 #}
+    {# ── 表格 ── #}
     {% for tbl in section.tables %}
     <div class="table-wrap" id="{{ tbl.id }}">
+      <p class="table-caption">
+        <span class="tbl-label">{{ tbl.label }}</span>&ensp;{{ tbl.caption }}
+      </p>
       <table class="data-table">
         {% if tbl.headers %}
         <thead>
           <tr>
-            {% for h in tbl.headers %}
-            <th>{{ h }}</th>
-            {% endfor %}
+            {% for h in tbl.headers %}<th>{{ h }}</th>{% endfor %}
           </tr>
         </thead>
         {% endif %}
         <tbody>
           {% for row in tbl.rows %}
           <tr>
-            {% for cell in row %}
-            <td>{{ cell }}</td>
-            {% endfor %}
+            {% for cell in row %}<td>{{ cell }}</td>{% endfor %}
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      <p class="table-caption">
-        <span class="tbl-label">{{ tbl.label }}</span> {{ tbl.caption }}
-      </p>
     </div>
     {% endfor %}
 
-    {# 公式 #}
+    {# ── 公式（MathML 保真渲染） ── #}
     {% for fm in section.formulas %}
     <div class="formula-wrap" id="{{ fm.id }}">
       {% if fm.mathml %}
-      {{ fm.mathml | safe }}
+        {{ fm.mathml | safe }}
       {% elif fm.latex %}
-      <div class="formula">$${{ fm.latex }}$$</div>
+        <div class="formula">$${{ fm.latex }}$$</div>
       {% endif %}
       {% if fm.label %}
       <p class="formula-label">{{ fm.label }}</p>
@@ -130,16 +169,19 @@ MathJax = {
     </div>
     {% endfor %}
 
-    {# 递归渲染子章节 #}
+    {# ── 递归渲染子章节 ── #}
     {% for sub in section.subsections %}
-    {{ render_section(sub) }}
+      {{ render_section(sub, sec_num ~ ".") }}
     {% endfor %}
-  </section>
-  {% endmacro %}
 
-  {% for section in article.sections %}
-  {{ render_section(section) }}
-  {% endfor %}
+  </section>
+{% endmacro %}
+
+{# 渲染所有顶级章节 #}
+{% for section in article.sections %}
+  {{ render_section(section, "") }}
+{% endfor %}
+
 </main>
 
 <!-- ═══════════════ 参考文献 ═══════════════ -->
@@ -149,16 +191,30 @@ MathJax = {
   <ol>
     {% for ref in article.references %}
     <li id="{{ ref.id }}" class="reference-item">
-      {% if ref.authors %}{{ ref.authors }}. {% endif %}
-      {% if ref.title %}"{{ ref.title }}." {% endif %}
-      {% if ref.journal %}<em>{{ ref.journal }}</em>{% endif %}
-      {% if ref.volume %}, {{ ref.volume }}{% endif %}
-      {% if ref.issue %}({{ ref.issue }}){% endif %}
-      {% if ref.pages %}: {{ ref.pages }}{% endif %}
-      {% if ref.year %} ({{ ref.year }}){% endif %}.
-      {% if ref.doi %}
-      <a href="https://doi.org/{{ ref.doi }}" class="ref-doi">doi:{{ ref.doi }}</a>
-      {% endif %}
+      {% if ref.authors -%}
+        {{ ref.authors }}.
+      {%- endif %}
+      {% if ref.title -%}
+        "{{ ref.title }}."
+      {%- endif %}
+      {% if ref.journal -%}
+        <em>{{ ref.journal }}</em>
+      {%- endif %}
+      {% if ref.volume -%}
+        , {{ ref.volume }}
+      {%- endif %}
+      {% if ref.issue -%}
+        ({{ ref.issue }})
+      {%- endif %}
+      {% if ref.pages -%}
+        : {{ ref.pages }}
+      {%- endif %}
+      {% if ref.year -%}
+        ({{ ref.year }}).
+      {%- endif %}
+      {% if ref.doi -%}
+        <a href="https://doi.org/{{ ref.doi }}" class="ref-doi">doi:{{ ref.doi }}</a>
+      {%- endif %}
     </li>
     {% endfor %}
   </ol>

@@ -1,24 +1,28 @@
 # ============================================
-# 期刊大赛 - 选题2: JATS XML → PDF 智能排版
+# JATS2PDF — 学术期刊智能排版引擎
+# 选题2: JATS XML → PDF 自动排版
 # ============================================
 
-# 核心依赖
+# ── 核心依赖 ──
 weasyprint>=60.0          # HTML → PDF 渲染引擎
-jinja2>=3.1.0             # 模板引擎，HTML模板渲染
+jinja2>=3.1.0             # HTML 模板引擎
 lxml>=5.0.0               # JATS XML 解析
 
-# 公式处理（可选方案）
-# 方案A: pymathml 解析 MathML → LaTeX
-# 方案B: 在HTML中嵌入 MathJax/KaTeX，WeasyPrint渲染时处理
+# ── 公式处理 ──
+# 方案A（推荐）: mathjax-node-cli — 需要安装 Node.js
+#   npm install -g mathjax-node-cli
+# 方案B: 直接在HTML中用MathJax CDN（无需安装，但WeasyPrint兼容性较差）
+# 方案C: KaTeX CLI — 速度更快但MathML支持不如MathJax
+#   npm install -g katex
 
-# 文献处理
-python-docx>=1.1.0        # 如果后续需要处理Word引用
-bibtexparser>=1.4.0       # 解析 BibTeX 参考文献
+# ── 参考文献 ──
+bibtexparser>=1.4.0       # BibTeX 解析（可选）
 
-# 开发工具
+# ── 开发工具 ──
 pytest>=8.0.0             # 单元测试
 black>=24.0.0             # 代码格式化
-isort>=5.13.0             # import 排序
 
-# 字体支持（中文排版）
-# WeasyPrint 需要系统中文字体，建议安装 Noto Sans CJK
+# ── 字体 ──
+# Windows: 系统自带 SimHei(黑体) + SimSun(宋体)
+# macOS:   建议安装 Noto Serif CJK SC + Noto Sans CJK SC
+# Linux:   sudo apt install fonts-noto-cjk
