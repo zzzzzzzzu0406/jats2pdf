@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}学术期刊优化平台 — 让每一篇论文都精美呈现{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════ Hero 区域 ═══════════════ -->
+<section class="hero">
+  <div class="hero-journal">
+    {{ journal_name or "Academic Journal Platform" }}
+  </div>
+  <h1 class="hero-title">
+    让每一篇学术论文<br>都值得被好好阅读
+  </h1>
+  <p class="hero-subtitle">
+    基于 JATS XML 的智能排版引擎，自动将结构化论文数据转化为精美网页，
+    支持中英双语、数学公式、图表和参考文献的完美呈现
+  </p>
+  <div class="hero-actions">
+    <a href="upload.html" class="btn btn-gold">马上体验</a>
+    <a href="browse.html" class="btn btn-outline" style="border-color:#fff;color:#fff">浏览论文</a>
+  </div>
+</section>
+
+<!-- ═══════════════ 论文展示区 ═══════════════ -->
+<section class="container" style="padding-top:var(--space-3xl);padding-bottom:var(--space-3xl)">
+  <h2 class="section-heading">最新论文</h2>
+  <div class="card-grid" id="paper-grid">
+    {% if articles %}
+      {% for article in articles %}
+      <article class="paper-card"
+               data-keywords="{{ article.keywords|join(',') }}">
+        <div class="card-journal">{{ article.journal or "学术论文" }}</div>
+        <h3 class="card-title">
+          <a href="article.html?id={{ loop.index }}">{{ article.title }}</a>
+        </h3>
+        <div class="card-authors">
+          {% for author in article.authors[:3] %}
+            {{ author.surname }}{{ author.given_name }}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+          {% if article.authors|length > 3 %}等{% endif %}
+        </div>
+        <p class="card-abstract">{{ article.abstract }}</p>
+        <div class="card-tags">
+          {% for kw in article.keywords[:4] %}
+          <span class="card-tag">{{ kw }}</span>
+          {% endfor %}
+        </div>
+        <div class="card-meta">
+          <span>{{ article.doi or "" }}</span>
+        </div>
+      </article>
+      {% endfor %}
+    {% else %}
+      {# 占位卡片（无数据时展示） #}
+      <article class="paper-card">
+        <div class="card-journal">示例论文</div>
+        <h3 class="card-title"><a href="article.html">示例论文正在加载中...</a></h3>
+        <div class="card-authors">作者信息</div>
+        <p class="card-abstract">请先通过上传页面上传 JATS XML 论文，或等待后端数据接入。</p>
+        <div class="card-tags"><span class="card-tag">示例</span></div>
+      </article>
+    {% endif %}
+  </div>
+</section>
+
+<!-- ═══════════════ 功能亮点 ═══════════════ -->
+<section style="background:var(--color-surface);padding:var(--space-3xl) 0">
+  <div class="container">
+    <h2 class="section-heading">平台功能</h2>
+    <div class="features">
+      <div class="feature-item">
+        <div class="feature-icon">📤</div>
+        <div class="feature-title">智能解析</div>
+        <p class="feature-desc">
+          支持 JATS 1.0/1.1 标准 XML 格式，自动识别标题层级、作者信息、章节结构、公式图表与参考文献
+        </p>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">🎨</div>
+        <div class="feature-title">精美排版</div>
+        <p class="feature-desc">
+          中英双语混排，黑体标题宋体正文，三线表格，MathML 公式渲染，参考文献悬挂缩进
+        </p>
+      </div>
+      <div class="feature-item">
+        <div class="feature-icon">📱</div>
+        <div class="feature-title">全平台阅读</div>
+        <p class="feature-desc">
+          响应式设计，桌面端侧边目录导航，移动端适配，支持单栏/双栏灵活切换
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

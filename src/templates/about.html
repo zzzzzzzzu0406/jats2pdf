@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}关于 — 学术期刊优化平台{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════ 关于页标题 ═══════════════ -->
+<section style="background:linear-gradient(135deg,#f0f4f8,#e8eef4);padding:var(--space-2xl) 0 var(--space-xl);text-align:center">
+  <h1 style="font-family:var(--font-heading);font-size:var(--text-h2);font-weight:700">关于本平台</h1>
+</section>
+
+<div class="container">
+
+  <!-- ── 项目背景 ── -->
+  <section class="about-section">
+    <h2>项目背景</h2>
+    <p>
+      本平台诞生于学术期刊排版优化大赛（选题2），旨在解决学术论文从结构化数据（JATS XML）
+      到精美网页呈现的"最后一公里"问题。传统的学术论文排版依赖 LaTeX 或 Word 模板，
+      难以在不同设备上呈现一致的阅读体验。本平台通过智能解析 JATS XML 并结合现代 Web 技术，
+      实现了论文的自动化精美排版。
+    </p>
+
+    <h3>JATS 是什么？</h3>
+    <p>
+      JATS（Journal Article Tag Suite）是学术出版领域的国际标准 XML 格式，
+      用于描述学术论文的结构化内容，包括标题、作者、摘要、章节、公式、图表、参考文献等。
+      全球主流学术出版商（Elsevier、Springer、Nature 等）均采用 JATS 作为数据交换标准。
+    </p>
+  </section>
+
+  <!-- ── 使用流程 ── -->
+  <section class="about-section">
+    <h2>使用流程</h2>
+    <div class="about-steps">
+      <div class="about-step">
+        <div class="step-number">1</div>
+        <div class="step-title">上传 XML</div>
+        <p class="step-desc">上传 JATS 格式的学术论文 XML 文件，或选择平台上的示例论文</p>
+      </div>
+      <div class="about-step">
+        <div class="step-number">2</div>
+        <div class="step-title">智能排版</div>
+        <p class="step-desc">系统自动解析论文结构，应用 Elsevier 期刊排版风格，渲染为精美网页</p>
+      </div>
+      <div class="about-step">
+        <div class="step-number">3</div>
+        <div class="step-title">浏览导出</div>
+        <p class="step-desc">在浏览器中阅读排版效果，调整栏数/字号，导出 HTML 或 PDF 文件</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 技术栈 ── -->
+  <section class="about-section">
+    <h2>技术栈</h2>
+    <table class="data-table" style="margin-top:var(--space-lg)">
+      <thead>
+        <tr><th>层级</th><th>技术</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>XML 解析</td><td>Python + lxml</td><td>XPath 查询，高性能 JATS XML 解析</td></tr>
+        <tr><td>模板引擎</td><td>Jinja2</td><td>将结构化数据渲染为 HTML 网页</td></tr>
+        <tr><td>前端框架</td><td>原生 HTML5 + CSS3 + JS</td><td>零依赖，纯静态，浏览器直接运行</td></tr>
+        <tr><td>公式渲染</td><td>MathJax 3.x</td><td>MathML/LaTeX 公式矢量渲染</td></tr>
+        <tr><td>PDF 导出</td><td>WeasyPrint</td><td>HTML+CSS → 高质量 PDF</td></tr>
+        <tr><td>设计参考</td><td>Elsevier 期刊</td><td>Expert Systems with Applications 排版风格</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── 团队 ── -->
+  <section class="about-section" style="text-align:center">
+    <h2>团队介绍</h2>
+    <div class="team-cards">
+      <div class="team-card">
+        <div class="member-avatar">🎨</div>
+        <div class="member-name">设计师</div>
+        <div class="member-role">UI/UX 设计</div>
+      </div>
+      <div class="team-card">
+        <div class="member-avatar">💻</div>
+        <div class="member-name">cyc120</div>
+        <div class="member-role">技术开发</div>
+      </div>
+      <div class="team-card">
+        <div class="member-avatar">💻</div>
+        <div class="member-name">队友 ③</div>
+        <div class="member-role">技术开发</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+{% endblock %}

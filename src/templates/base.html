@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}学术期刊优化平台{% endblock %}</title>
+<style>
+/* ══════ 内嵌样式 ══════ */
+{{ inline_css | safe }}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ 顶部导航 ═══════════════ -->
+<nav class="navbar">
+  <a href="index.html" class="navbar-brand">
+    <span class="brand-icon">📰</span>
+    {% if journal_name %}{{ journal_name }}{% else %}学术期刊优化平台{% endif %}
+  </a>
+  <button class="navbar-toggle" onclick="document.querySelector('.navbar-links').classList.toggle('open')">☰</button>
+  <div class="navbar-links">
+    <a href="index.html"   class="{% if active_page == 'index' %}active{% endif %}">首页</a>
+    <a href="browse.html"  class="{% if active_page == 'browse' %}active{% endif %}">论文浏览</a>
+    <a href="upload.html"  class="{% if active_page == 'upload' %}active{% endif %}">上传转换</a>
+    <a href="about.html"   class="{% if active_page == 'about' %}active{% endif %}">关于</a>
+  </div>
+</nav>
+
+<!-- ═══════════════ 页面主体 ═══════════════ -->
+{% block content %}{% endblock %}
+
+<!-- ═══════════════ 页脚 ═══════════════ -->
+<footer class="site-footer">
+  <div class="footer-brand">{{ journal_name or "学术期刊优化平台" }}</div>
+  <p>基于 JATS XML 的学术期刊智能排版与展示平台</p>
+  <p>© 2024 期刊大赛·选题2 &nbsp;|&nbsp; <a href="https://github.com/zzzzzzzzu0406/jats2pdf" target="_blank">GitHub</a></p>
+</footer>
+
+<!-- ═══════════════ 返回顶部 ═══════════════ -->
+<button class="back-to-top" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="返回顶部">↑</button>
+
+<!-- ═══════════════ 平台脚本 ═══════════════ -->
+<script>
+{{ inline_js | safe }}
+</script>
+</body>
+</html>

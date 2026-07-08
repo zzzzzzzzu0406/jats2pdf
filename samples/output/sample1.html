@@ -2,81 +2,591 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>基于深度学习的学术文档结构智能识别方法研究</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>基于深度学习的学术文档结构智能识别方法研究 | JATS2PDF</title>
 <meta name="generator" content="JATS2PDF v2.0">
-<!--
-  ═══════════════════════════════════════════════
-  JATS2PDF — 学术期刊智能排版模板
-  选题2: JATS XML → PDF 自动排版
-  支持: 中英双语 / 单栏双栏 / MathML公式
-  ═══════════════════════════════════════════════
--->
 
-<!-- MathJax 3.x：公式渲染引擎 -->
+<!-- MathJax: 数学公式渲染 -->
 <script>
 MathJax = {
-  tex: {
-    inlineMath: [['$', '$'], ['\\(', '\\)']],
-    displayMath: [['$$', '$$'], ['\\[', '\\]']],
-    processEscapes: true
-  },
-  svg: {
-    fontCache: 'global',
-    scale: 1.0
-  },
-  mml: {
-    parseAs: 'xml'
-  },
-  options: {
-    enableMenu: false,
-    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
-  }
+  tex: { inlineMath: [['$','$'],['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] },
+  svg: { fontCache: 'global' },
+  options: { enableMenu: false }
 };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-svg.js" async></script>
-</head>
 
+<!-- 引入外部字体（可选，增强跨平台一致性） -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ══════ 内嵌样式（自包含HTML，无需外部CSS文件） ══════ */
+/* ═══════════════════════════════════════════════
+   学术期刊网页前端 — 主样式表
+   参考: Elsevier Expert Systems with Applications
+   设计: 中英双语 / 优雅学术风 / 响应式
+   ═══════════════════════════════════════════════ */
+
+/* ── CSS 变量 ── */
+:root {
+  /* 字体 */
+  --font-heading: "SimHei", "黑体", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-body:    "SimSun", "宋体", "Noto Serif SC", "Source Han Serif SC", "Georgia", serif;
+  --font-en:      "Georgia", "Times New Roman", "Noto Serif SC", serif;
+  --font-mono:    "Consolas", "Courier New", monospace;
+
+  /* 颜色 */
+  --color-bg:       #fcfcfc;
+  --color-surface:  #ffffff;
+  --color-text:     #1a1a1a;
+  --color-text-sub: #555;
+  --color-text-light: #888;
+  --color-primary:  #1a5276;
+  --color-accent:   #2e86c1;
+  --color-link:     #1a6daa;
+  --color-border:   #e0e0e0;
+  --color-border-light: #f0f0f0;
+  --color-table-stripe: #f8f9fa;
+
+  /* 间距 */
+  --content-width:  780px;
+  --content-padding: 24px;
+  --section-gap:    2.5rem;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+/* ── 全局重置 ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.85;
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════ 顶部导航栏 ═══════════════ */
+.top-bar {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--shadow-sm);
+}
+
+.top-bar-brand {
+  font-family: var(--font-en);
+  font-size: 14px;
+  font-style: italic;
+  color: var(--color-primary);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.top-bar-nav {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  font-family: var(--font-heading);
+}
+
+.top-bar-nav a {
+  color: var(--color-text-sub);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.top-bar-nav a:hover {
+  color: var(--color-accent);
+}
+
+/* ═══════════════ 文章主体容器 ═══════════════ */
+.article-container {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--content-padding);
+}
+
+/* ═══════════════ 标题区 ═══════════════ */
+.article-header {
+  text-align: center;
+  padding: 3rem 0 2rem 0;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 2rem;
+}
+
+.article-type {
+  font-family: var(--font-en);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--color-accent);
+  margin-bottom: 1rem;
+}
+
+.journal-name {
+  font-family: var(--font-en);
+  font-size: 14px;
+  font-style: italic;
+  color: var(--color-primary);
+  margin-bottom: 1.5rem;
+  letter-spacing: 0.3px;
+}
+
+.article-title {
+  font-family: var(--font-heading);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--color-text);
+  margin-bottom: 1rem;
+}
+
+.article-subtitle {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--color-text-sub);
+  margin-bottom: 2rem;
+  line-height: 1.5;
+}
+
+/* ── 作者区 ── */
+.authors {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.3em 0.8em;
+  font-size: 15px;
+  margin-bottom: 0.8rem;
+}
+
+.author {
+  white-space: nowrap;
+  font-family: var(--font-body);
+}
+
+.author sup {
+  font-size: 11px;
+  color: var(--color-accent);
+}
+
+.author-email {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-sub);
+  margin-top: 2px;
+}
+
+.orcid {
+  color: #a6ce39;
+  text-decoration: none;
+  font-size: 11px;
+}
+
+.article-meta {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-top: 1rem;
+  font-size: 13px;
+  color: var(--color-text-light);
+  font-family: var(--font-en);
+}
+
+.article-meta a {
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+.article-meta a:hover {
+  text-decoration: underline;
+}
+
+/* ═══════════════ 摘要 ═══════════════ */
+.abstract {
+  background: linear-gradient(135deg, #f8f9fb 0%, #f0f2f5 100%);
+  border-left: 4px solid var(--color-accent);
+  padding: 1.5rem 2rem;
+  margin: 0 0 2rem 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.abstract h2 {
+  font-family: var(--font-heading);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 0.6rem;
+  letter-spacing: 0.5px;
+}
+
+.abstract p {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--color-text);
+  text-indent: 0;
+}
+
+/* ═══════════════ 关键词 ═══════════════ */
+.keywords {
+  font-size: 14px;
+  color: var(--color-text-sub);
+  margin-bottom: 2.5rem;
+  padding: 0 0.5rem;
+}
+
+.keywords strong {
+  font-family: var(--font-heading);
+  color: var(--color-text);
+  margin-right: 0.3em;
+}
+
+/* ═══════════════ 章节标题 ═══════════════ */
+.level-1 > .section-title {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: var(--section-gap) 0 0.8rem 0;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.level-2 > .section-title {
+  font-family: var(--font-heading);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 1.8rem 0 0.6rem 0;
+}
+
+.level-3 > .section-title {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-sub);
+  margin: 1.3rem 0 0.4rem 0;
+}
+
+/* ── 正文段落 ── */
+.article-body p {
+  text-indent: 2em;
+  margin: 0.6rem 0;
+  font-size: 17px;
+  line-height: 1.85;
+  color: var(--color-text);
+}
+
+/* 段落间首尾相接时减少间距 */
+.article-body p + p {
+  margin-top: 0.2rem;
+}
+
+/* ═══════════════ 图表 ═══════════════ */
+
+/* 图 */
+.figure {
+  text-align: center;
+  margin: 2rem 0;
+  padding: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-sm);
+}
+
+.figure img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.figure figcaption {
+  font-size: 13px;
+  color: var(--color-text-sub);
+  margin-top: 0.8rem;
+  text-align: left;
+  line-height: 1.6;
+}
+
+.fig-label {
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+/* ═══════════════ 表格 ═══════════════ */
+
+.table-wrap {
+  margin: 2rem 0;
+  overflow-x: auto;
+}
+
+/* 题注在表上方 */
+.table-caption {
+  font-size: 14px;
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+
+.tbl-label {
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+/* 三线表 */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.data-table thead {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.data-table th {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+}
+
+.data-table td {
+  padding: 9px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: var(--color-table-stripe);
+}
+
+.data-table tbody tr:hover {
+  background: #eef5fb;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ═══════════════ 公式 ═══════════════ */
+
+.formula-wrap {
+  margin: 1.8rem 0;
+  text-align: center;
+  padding: 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+}
+
+.formula-label {
+  font-size: 14px;
+  color: var(--color-text-sub);
+  text-align: right;
+  margin-top: 0.5rem;
+}
+
+/* ═══════════════ 参考文献 ═══════════════ */
+
+.references {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid var(--color-border);
+}
+
+.references h2 {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 1.5rem;
+}
+
+.references ol {
+  font-size: 14px;
+  line-height: 1.7;
+  list-style: none;
+  counter-reset: ref-counter;
+  padding-left: 0;
+}
+
+/* 悬挂缩进 */
+.reference-item {
+  margin-bottom: 0.7rem;
+  padding-left: 2.2em;
+  text-indent: -2.2em;
+  counter-increment: ref-counter;
+  color: var(--color-text-sub);
+}
+
+.reference-item::before {
+  content: "[" counter(ref-counter) "] ";
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.reference-item em {
+  font-style: italic;
+  color: var(--color-text);
+}
+
+.ref-doi {
+  color: var(--color-link);
+  font-size: 13px;
+  word-break: break-all;
+  text-decoration: none;
+}
+
+.ref-doi:hover {
+  text-decoration: underline;
+}
+
+/* ═══════════════ 页脚 ═══════════════ */
+.article-footer {
+  text-align: center;
+  padding: 3rem 0 2rem;
+  margin-top: 2rem;
+  border-top: 1px solid var(--color-border-light);
+  font-size: 13px;
+  color: var(--color-text-light);
+  font-family: var(--font-en);
+}
+
+/* ═══════════════ 响应式 ═══════════════ */
+
+@media (max-width: 860px) {
+  .article-container {
+    padding: 16px;
+  }
+
+  .article-title {
+    font-size: 24px;
+  }
+
+  .level-1 > .section-title {
+    font-size: 20px;
+  }
+
+  .level-2 > .section-title {
+    font-size: 17px;
+  }
+
+  .article-body p {
+    font-size: 16px;
+  }
+
+  .data-table {
+    font-size: 13px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 6px 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .article-title {
+    font-size: 20px;
+  }
+
+  .article-body p {
+    text-indent: 1.5em;
+    font-size: 15px;
+  }
+
+  .abstract {
+    padding: 1rem 1.2rem;
+    margin: 0 0 1.5rem 0;
+  }
+}
+
+</style>
+</head>
 <body>
 
-<!-- ═══════════════ 标题页 ═══════════════ -->
-<header class="article-header">
-
-
-  <h1 class="article-title">基于深度学习的学术文档结构智能识别方法研究</h1>
-
-  <p class="article-subtitle">一种融合LayoutLM与图神经网络的混合架构</p>
-
-  <div class="authors">
-    <span class="author">
-      张三
-      <sup><a href="https://orcid.org/0000-0001-2345-6789" class="orcid">ORCID</a></sup>
-      <span class="author-email">zhangsan@university.edu.cn</span>
-<span>, </span>    </span>
-    <span class="author">
-      李四
-      <sup><a href="https://orcid.org/0000-0002-3456-7890" class="orcid">ORCID</a></sup>
-      <span class="author-email">lisi@university.edu.cn</span>
-    </span>
+<!-- ═══════════════ 顶部导航 ═══════════════ -->
+<nav class="top-bar">
+  <span class="top-bar-brand">
+学术期刊  </span>
+  <div class="top-bar-nav">
+    <a href="#">论文</a>
+    <a href="#">作者</a>
+    <a href="#">参考文献</a>
+    <a href="https://doi.org/10.1234/sample.2024.001" target="_blank">DOI</a>
   </div>
+</nav>
 
-  <div class="doi">
-    DOI: <a href="https://doi.org/10.1234/sample.2024.001">10.1234/sample.2024.001</a>
-  </div>
-</header>
+<!-- ═══════════════ 文章主体 ═══════════════ -->
+<article class="article-container">
 
-<!-- ═══════════════ 摘要 ═══════════════ -->
-<section class="abstract">
-  <h2>摘　要</h2>
-  <p>学术文档结构识别是文献数字化中的关键任务。本文提出了一种融合LayoutLM与图神经网络的混合架构，用于自动识别学术论文中的章节标题、段落、公式、图表和参考文献等结构元素。在构建的中文学术论文数据集上，该方法在标题层级识别任务中达到96.3%的F1分数，在公式定位任务中达到94.7%的准确率。实验结果表明，图神经网络能有效捕捉文档元素间的空间关系，显著提升了版面分析的鲁棒性。</p>
-</section>
+  <!-- ── 标题区 ── -->
+  <header class="article-header">
 
-<!-- ═══════════════ 关键词 ═══════════════ -->
-<section class="keywords">
-  <strong>关键词：</strong>文档结构识别；LayoutLM；图神经网络；学术文档；版面分析
-</section>
 
-<!-- ═══════════════ 正文 ═══════════════ -->
-<main class="article-body">
+    <h1 class="article-title">基于深度学习的学术文档结构智能识别方法研究</h1>
+
+    <p class="article-subtitle">一种融合LayoutLM与图神经网络的混合架构</p>
+
+    <div class="authors">
+      <span class="author">
+        张三
+        <sup><a href="https://orcid.org/0000-0001-2345-6789" class="orcid" target="_blank">ⓘ ORCID</a></sup>
+        <span class="author-email">zhangsan@university.edu.cn</span>
+<span>, </span>      </span>
+      <span class="author">
+        李四
+        <sup><a href="https://orcid.org/0000-0002-3456-7890" class="orcid" target="_blank">ⓘ ORCID</a></sup>
+        <span class="author-email">lisi@university.edu.cn</span>
+      </span>
+    </div>
+
+    <div class="article-meta">
+      <span>DOI: <a href="https://doi.org/10.1234/sample.2024.001" target="_blank">10.1234/sample.2024.001</a></span>
+      <span>中文 | 中英双语</span>
+    </div>
+  </header>
+
+  <!-- ── 摘要 ── -->
+  <section class="abstract">
+    <h2>摘　要</h2>
+    <p>学术文档结构识别是文献数字化中的关键任务。本文提出了一种融合LayoutLM与图神经网络的混合架构，用于自动识别学术论文中的章节标题、段落、公式、图表和参考文献等结构元素。在构建的中文学术论文数据集上，该方法在标题层级识别任务中达到96.3%的F1分数，在公式定位任务中达到94.7%的准确率。实验结果表明，图神经网络能有效捕捉文档元素间的空间关系，显著提升了版面分析的鲁棒性。</p>
+  </section>
+
+  <!-- ── 关键词 ── -->
+  <section class="keywords">
+    <strong>关键词：</strong>文档结构识别；LayoutLM；图神经网络；学术文档；版面分析
+  </section>
+
+  <!-- ── 正文 ── -->
+  <main class="article-body">
 
 
     <section class="section level-1" id="sec-1">
@@ -275,20 +785,27 @@ MathJax = {
   </section>
 
 
-</main>
+  </main>
 
-<!-- ═══════════════ 参考文献 ═══════════════ -->
-<section class="references">
-  <h2>参考文献</h2>
-  <ol>
-    <li id="r1" class="reference-item">
-"LayoutLM: Pre-training of Text and Layout for Document Image Understanding."<em>Proceedings of KDD</em>, 1: 1192(2020).<a href="https://doi.org/10.1145/3394486.3403172" class="ref-doi">doi:10.1145/3394486.3403172</a>    </li>
-    <li id="r2" class="reference-item">
-"LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking."<em>Proceedings of ACM Multimedia</em>, 1: 4083(2022).<a href="https://doi.org/10.1145/3503161.3548397" class="ref-doi">doi:10.1145/3503161.3548397</a>    </li>
-    <li id="r3" class="reference-item">
-"Graph Attention Networks."<em>ICLR</em>(2018).    </li>
-  </ol>
-</section>
+  <!-- ── 参考文献 ── -->
+  <section class="references" id="references">
+    <h2>参考文献</h2>
+    <ol>
+      <li id="r1" class="reference-item">
+"LayoutLM: Pre-training of Text and Layout for Document Image Understanding."<em>Proceedings of KDD</em>, 1: 1192(2020).<a href="https://doi.org/10.1145/3394486.3403172" class="ref-doi" target="_blank">doi:10.1145/3394486.3403172</a>      </li>
+      <li id="r2" class="reference-item">
+"LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking."<em>Proceedings of ACM Multimedia</em>, 1: 4083(2022).<a href="https://doi.org/10.1145/3503161.3548397" class="ref-doi" target="_blank">doi:10.1145/3503161.3548397</a>      </li>
+      <li id="r3" class="reference-item">
+"Graph Attention Networks."<em>ICLR</em>(2018).      </li>
+    </ol>
+  </section>
+
+</article>
+
+<!-- ═══════════════ 页脚 ═══════════════ -->
+<footer class="article-footer">
+  <p>© 学术期刊 &nbsp;·&nbsp; 由 JATS2PDF 生成 &nbsp;·&nbsp; 中英双语学术期刊展示</p>
+</footer>
 
 </body>
 </html>

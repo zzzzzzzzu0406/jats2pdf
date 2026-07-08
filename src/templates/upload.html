@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}上传转换 — 学术期刊优化平台{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════ 上传页标题 ═══════════════ -->
+<section style="background:linear-gradient(135deg,#f0f4f8,#e8eef4);padding:var(--space-2xl) 0 var(--space-xl)">
+  <div class="container">
+    <h1 style="font-family:var(--font-heading);font-size:var(--text-h2);font-weight:700;text-align:center;margin-bottom:var(--space-sm)">论文上传与转换</h1>
+    <p style="text-align:center;color:var(--color-text-sub);font-size:var(--text-sm)">
+      上传 JATS XML 格式的学术论文，即时预览排版效果，调整样式后导出
+    </p>
+  </div>
+</section>
+
+<div class="container" style="padding-top:var(--space-xl);padding-bottom:var(--space-3xl)">
+
+  <!-- ── 上传区域 ── -->
+  <div class="upload-zone" id="upload-zone">
+    <div class="upload-icon">📄</div>
+    <div class="upload-title">拖拽 JATS XML 文件到此处</div>
+    <div class="upload-hint">或点击此处选择文件 &nbsp;·&nbsp; 支持 .xml 格式 &nbsp;·&nbsp; JATS 1.0/1.1 标准</div>
+    <input type="file" accept=".xml" id="file-input">
+  </div>
+
+  <div id="upload-status" style="text-align:center;margin-top:var(--space-md);font-size:var(--text-sm)"></div>
+
+  <!-- ── 排版设置 ── -->
+  <div class="settings-panel">
+    <div class="settings-group">
+      <div class="settings-label">排版栏数</div>
+      <label style="margin-right:var(--space-md);cursor:pointer">
+        <input type="radio" name="columns" value="single" checked> 单栏
+      </label>
+      <label style="cursor:pointer">
+        <input type="radio" name="columns" value="double"> 双栏
+      </label>
+    </div>
+    <div class="settings-group">
+      <div class="settings-label">正文字号</div>
+      <select>
+        <option value="small">小号 (15px)</option>
+        <option value="medium" selected>中号 (17px)</option>
+        <option value="large">大号 (19px)</option>
+      </select>
+    </div>
+    <div class="settings-group">
+      <div class="settings-label">期刊风格</div>
+      <select>
+        <option value="elsevier" selected>Elsevier 风格</option>
+        <option value="springer">Springer 风格</option>
+        <option value="ieee">IEEE 风格</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── 操作按钮 ── -->
+  <div style="text-align:center;margin-top:var(--space-xl);display:flex;gap:var(--space-md);justify-content:center;flex-wrap:wrap">
+    <button class="btn btn-primary" onclick="handleConvert()">开始转换</button>
+    <button class="btn btn-outline" onclick="handlePreview()">预览效果</button>
+    <button class="btn btn-outline" onclick="handleDownload()">下载 HTML</button>
+  </div>
+
+  <!-- ── 预览区 ── -->
+  <div class="preview-area" style="margin-top:var(--space-2xl)">
+    <div class="preview-placeholder" id="preview-placeholder">
+      上传并转换 JATS XML 后，排版效果将在此处实时预览
+    </div>
+    <iframe id="preview-frame" style="display:none;width:100%;height:600px;border:none" sandbox="allow-scripts allow-same-origin"></iframe>
+  </div>
+</div>
+
+<script>
+// 上传页额外交互（在 platform.js 基础上）
+function handleConvert() {
+  var fileInput = document.getElementById('file-input');
+  var status = document.getElementById('upload-status');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    status.innerHTML = '<span style="color:var(--color-danger)">请先选择要上传的 JATS XML 文件</span>';
+    return;
+  }
+  status.innerHTML = '<span style="color:var(--color-success)">正在转换... (实际部署时由后端处理)</span>';
+  handlePreview();
+}
+
+function handlePreview() {
+  var frame = document.getElementById('preview-frame');
+  var placeholder = document.getElementById('preview-placeholder');
+  // 实际部署时，这里会显示后端渲染的论文预览
+  // 暂时展示提示信息
+  var previewHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-sub);font-size:var(--text-sm);text-align:center;padding:var(--space-xl)">' +
+    '预览功能已就绪<br><small>实际部署时，上传的XML将由Python后端解析并在iframe中渲染论文排版效果</small></div>';
+  frame.srcdoc = previewHTML;
+  frame.style.display = 'block';
+  placeholder.style.display = 'none';
+}
+
+function handleDownload() {
+  var status = document.getElementById('upload-status');
+  status.innerHTML = '<span style="color:var(--color-success)">HTML 下载功能已就绪（实际部署时触发下载）</span>';
+}
+</script>
+
+{% endblock %}
