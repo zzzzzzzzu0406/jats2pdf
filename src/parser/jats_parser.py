@@ -111,9 +111,15 @@ def _xpath(el, expr, ns=JATS_NS):
     return el.xpath(expr, namespaces=ns)
 
 def _text(el, expr, ns=JATS_NS):
-    """获取 XPath 匹配的第一个文本"""
+    """获取 XPath 匹配的第一个文本（递归提取所有文本节点）"""
     results = el.xpath(expr, namespaces=ns)
-    return str(results[0]).strip() if results else ""
+    if not results:
+        return ""
+    r = results[0]
+    # lxml Element: 使用 itertext() 提取所有嵌套文本
+    if hasattr(r, "itertext"):
+        return "".join(r.itertext()).strip()
+    return str(r).strip()
 
 # ─── 解析器 ─────────────────────────────────────────────
 

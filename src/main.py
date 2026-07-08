@@ -27,8 +27,7 @@ import os
 
 from .parser.jats_parser import JATSParser
 from .renderer.html_renderer import HTMLRenderer
-from .renderer.pdf_renderer import PDFRenderer
-from .renderer.formula_renderer import FormulaRenderer
+# PDFRenderer / FormulaRenderer 延迟加载，避免 Windows 上 GTK 缺失导致 --html 模式也无法运行
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,6 +83,7 @@ def main():
     if args.render_formulas:
         logger.info("🧮 正在预渲染公式 (MathML/LaTeX → SVG)...")
         try:
+            from .renderer.formula_renderer import FormulaRenderer
             formula_renderer = FormulaRenderer(method="auto")
             article = formula_renderer.process_article_formulas(article)
             logger.info("✅ 公式预渲染完成")
@@ -119,6 +119,7 @@ def main():
     # ──────────────────────────────────────
     logger.info(f"🖨️ 正在生成 PDF: {args.output}")
     try:
+        from .renderer.pdf_renderer import PDFRenderer
         pdf_renderer = PDFRenderer(css_path=args.css)
         pdf_renderer.render_to_file(html_content, args.output)
         logger.info(f"🎉 PDF 生成完成: {args.output}")

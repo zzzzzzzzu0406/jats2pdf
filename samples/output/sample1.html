@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>基于深度学习的学术文档结构智能识别方法研究</title>
+<meta name="generator" content="JATS2PDF v2.0">
+<!--
+  ═══════════════════════════════════════════════
+  JATS2PDF — 学术期刊智能排版模板
+  选题2: JATS XML → PDF 自动排版
+  支持: 中英双语 / 单栏双栏 / MathML公式
+  ═══════════════════════════════════════════════
+-->
+
+<!-- MathJax 3.x：公式渲染引擎 -->
+<script>
+MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    processEscapes: true
+  },
+  svg: {
+    fontCache: 'global',
+    scale: 1.0
+  },
+  mml: {
+    parseAs: 'xml'
+  },
+  options: {
+    enableMenu: false,
+    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-svg.js" async></script>
+</head>
+
+<body>
+
+<!-- ═══════════════ 标题页 ═══════════════ -->
+<header class="article-header">
+
+
+  <h1 class="article-title">基于深度学习的学术文档结构智能识别方法研究</h1>
+
+  <p class="article-subtitle">一种融合LayoutLM与图神经网络的混合架构</p>
+
+  <div class="authors">
+    <span class="author">
+      张三
+      <sup><a href="https://orcid.org/0000-0001-2345-6789" class="orcid">ORCID</a></sup>
+      <span class="author-email">zhangsan@university.edu.cn</span>
+<span>, </span>    </span>
+    <span class="author">
+      李四
+      <sup><a href="https://orcid.org/0000-0002-3456-7890" class="orcid">ORCID</a></sup>
+      <span class="author-email">lisi@university.edu.cn</span>
+    </span>
+  </div>
+
+  <div class="doi">
+    DOI: <a href="https://doi.org/10.1234/sample.2024.001">10.1234/sample.2024.001</a>
+  </div>
+</header>
+
+<!-- ═══════════════ 摘要 ═══════════════ -->
+<section class="abstract">
+  <h2>摘　要</h2>
+  <p>学术文档结构识别是文献数字化中的关键任务。本文提出了一种融合LayoutLM与图神经网络的混合架构，用于自动识别学术论文中的章节标题、段落、公式、图表和参考文献等结构元素。在构建的中文学术论文数据集上，该方法在标题层级识别任务中达到96.3%的F1分数，在公式定位任务中达到94.7%的准确率。实验结果表明，图神经网络能有效捕捉文档元素间的空间关系，显著提升了版面分析的鲁棒性。</p>
+</section>
+
+<!-- ═══════════════ 关键词 ═══════════════ -->
+<section class="keywords">
+  <strong>关键词：</strong>文档结构识别；LayoutLM；图神经网络；学术文档；版面分析
+</section>
+
+<!-- ═══════════════ 正文 ═══════════════ -->
+<main class="article-body">
+
+
+    <section class="section level-1" id="sec-1">
+
+    <h2 class="section-title">
+      1&ensp;引言
+    </h2>
+
+    <p>随着学术产出的快速增长，海量学术文献的数字化和结构化成为研究热点。传统的文档处理依赖人工标注和基于规则的方法，难以应对多样化的排版格式。近年来，预训练语言模型和视觉-语言联合模型的发展为文档智能理解开辟了新路径。</p>
+    <p>本文提出了一种融合LayoutLM与图神经网络（GNN）的混合架构，充分利用LayoutLM的跨模态表征能力和GNN的结构关系建模优势。主要贡献包括：（1）设计了一个端到端的学术文档结构识别流水线；（2）提出了基于GNN的文档元素关系建模方法；（3）构建了大规模中文学术论文标注数据集。</p>
+
+
+
+
+
+  </section>
+
+    <section class="section level-1" id="sec-2">
+
+    <h2 class="section-title">
+      2&ensp;相关工作
+    </h2>
+
+
+
+
+
+        <section class="section level-2" id="sec-2.1">
+
+    <h3 class="section-title">
+      2.1&ensp;基于深度学习的文档分析
+    </h3>
+
+    <p>近年来，文档分析领域经历了从规则驱动到数据驱动的范式转变。LayoutLM系列模型通过联合建模文本和布局信息，在多种文档理解任务上取得了优异表现。LayoutLMv3进一步引入了图像patch作为输入，实现了文本、布局和视觉三模态的统一建模。</p>
+
+
+
+
+
+  </section>
+
+        <section class="section level-2" id="sec-2.2">
+
+    <h3 class="section-title">
+      2.2&ensp;图神经网络在文档分析中的应用
+    </h3>
+
+    <p>图神经网络天然适合建模文档元素之间的空间和语义关系。现有方法通常将文档元素（文本框、段落、表格等）视为图中的节点，通过定义距离、对齐等关系来构造边，然后使用GCN或GAT进行消息传递。</p>
+
+
+
+
+
+  </section>
+
+
+  </section>
+
+    <section class="section level-1" id="sec-3">
+
+    <h2 class="section-title">
+      3&ensp;方法
+    </h2>
+
+
+
+
+
+        <section class="section level-2" id="sec-3.1">
+
+    <h3 class="section-title">
+      3.1&ensp;整体架构
+    </h3>
+
+    <p>本文提出的混合架构由三个核心模块组成：文档编码模块、结构关系建模模块和序列标注模块。文档编码模块使用LayoutLMv3提取每个token级别的多模态特征；结构关系建模模块将文档元素组织为图结构，通过多层GAT进行特征增强；序列标注模块使用条件随机场（CRF）进行全局最优标签序列的解码。</p>
+
+
+
+
+
+  </section>
+
+        <section class="section level-2" id="sec-3.2">
+
+    <h3 class="section-title">
+      3.2&ensp;图构建策略
+    </h3>
+
+    <p>我们将每个文档元素（段落、标题、公式、图表、表格）作为图节点。边的构建遵循三种策略：空间邻近（距离小于阈值δ的节点连边）、视觉对齐（水平或垂直对齐的节点连边）和阅读顺序（按阅读顺序相邻的节点连边）。</p>
+    <p>公式如下所示：</p>
+    <p>其中h_i表示节点i的特征表示，N(i)为节点i的邻居集合，α_ij为注意力系数，W为可学习的权重矩阵。</p>
+
+
+
+    <div class="formula-wrap" id="eq1">
+        <mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xlink="http://www.w3.org/1999/xlink">
+            <mml:mrow>
+              <mml:msub><mml:mi>h</mml:mi><mml:mi>i</mml:mi></mml:msub>
+              <mml:mo>=</mml:mo>
+              <mml:mi>σ</mml:mi>
+              <mml:mrow>
+                <mml:mo>(</mml:mo>
+                <mml:mrow>
+                  <mml:munder><mml:mo>∑</mml:mo><mml:mi>j∈N(i)</mml:mi></mml:munder>
+                  <mml:mrow>
+                    <mml:msub><mml:mi>α</mml:mi><mml:mi>ij</mml:mi></mml:msub>
+                    <mml:mi>W</mml:mi>
+                    <mml:msub><mml:mi>h</mml:mi><mml:mi>j</mml:mi></mml:msub>
+                  </mml:mrow>
+                </mml:mrow>
+                <mml:mo>)</mml:mo>
+              </mml:mrow>
+            </mml:mrow>
+          </mml:math>
+        
+
+      <p class="formula-label">（1）</p>
+    </div>
+
+
+  </section>
+
+
+  </section>
+
+    <section class="section level-1" id="sec-4">
+
+    <h2 class="section-title">
+      4&ensp;实验
+    </h2>
+
+
+
+
+
+        <section class="section level-2" id="sec-4.1">
+
+    <h3 class="section-title">
+      4.1&ensp;数据集
+    </h3>
+
+    <p>我们从知网（CNKI）和万方数据库中收集了5,000篇中文学术论文，涵盖计算机科学、电子工程、数学、物理学和生物学五个学科。每篇论文由三位标注者独立标注，取两人以上一致的标注作为最终结果。</p>
+
+
+    <div class="table-wrap" id="t1">
+      <p class="table-caption">
+        <span class="tbl-label">表1</span>&ensp;
+      </p>
+      <table class="data-table">
+        <thead>
+          <tr><th>学科</th><th>论文数</th><th>平均页数</th><th>平均章节数</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>计算机科学</td><td>1,200</td><td>8.5</td><td>5.2</td></tr>
+          <tr><td>电子工程</td><td>980</td><td>7.8</td><td>4.8</td></tr>
+          <tr><td>数学</td><td>1,050</td><td>10.2</td><td>6.1</td></tr>
+          <tr><td>物理学</td><td>890</td><td>9.1</td><td>5.5</td></tr>
+          <tr><td>生物学</td><td>880</td><td>9.8</td><td>5.9</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+
+
+  </section>
+
+        <section class="section level-2" id="sec-4.2">
+
+    <h3 class="section-title">
+      4.2&ensp;实验结果
+    </h3>
+
+    <p>我们在测试集上评估了所提方法在各项任务上的性能。实验结果表明，融合GNN后，标题层级识别的F1分数从93.1%提升至96.3%，公式定位的准确率从89.2%提升至94.7%。</p>
+
+
+
+
+
+  </section>
+
+
+  </section>
+
+    <section class="section level-1" id="sec-5">
+
+    <h2 class="section-title">
+      5&ensp;结论
+    </h2>
+
+    <p>本文提出了一种融合LayoutLM与图神经网络的学术文档结构识别方法。实验表明，GNN能有效建模文档元素间的空间和语义关系，显著提升结构识别的准确性。未来的工作将探索将本方法扩展到更多语言和文档类型。</p>
+
+
+
+
+
+  </section>
+
+
+</main>
+
+<!-- ═══════════════ 参考文献 ═══════════════ -->
+<section class="references">
+  <h2>参考文献</h2>
+  <ol>
+    <li id="r1" class="reference-item">
+"LayoutLM: Pre-training of Text and Layout for Document Image Understanding."<em>Proceedings of KDD</em>, 1: 1192(2020).<a href="https://doi.org/10.1145/3394486.3403172" class="ref-doi">doi:10.1145/3394486.3403172</a>    </li>
+    <li id="r2" class="reference-item">
+"LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking."<em>Proceedings of ACM Multimedia</em>, 1: 4083(2022).<a href="https://doi.org/10.1145/3503161.3548397" class="ref-doi">doi:10.1145/3503161.3548397</a>    </li>
+    <li id="r3" class="reference-item">
+"Graph Attention Networks."<em>ICLR</em>(2018).    </li>
+  </ol>
+</section>
+
+</body>
+</html>
