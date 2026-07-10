@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>预览：{{ article.title or "学术论文" }}</title>
+<style>
+/* ── 预览专用样式：干净、紧凑、适合 iframe 内展示 ── */
+:root {
+  --font-body: "PingFang SC","Songti SC","STSong","SimSun","Noto Serif CJK SC",serif;
+  --font-heading: "PingFang SC","Heiti SC","STHeiti","SimHei","Noto Sans CJK SC",sans-serif;
+  --color-text: #1a1a1a;
+  --color-text-sub: #555;
+  --color-accent: #1a5276;
+  --color-border: #ddd;
+  --color-bg: #fff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  font-size: {{ font_size or '16px' }};
+  line-height: 1.8;
+  color: var(--color-text);
+  background: var(--color-bg);
+  padding: 24px 28px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* ── 文章头部 ── */
+.journal-name { font-style: italic; color: var(--color-text-sub); font-size: 0.9em; margin-bottom: 8px; }
+.article-title { font-family: var(--font-heading); font-size: 1.6em; font-weight: 700; margin-bottom: 12px; line-height: 1.4; }
+.article-subtitle { font-size: 1.1em; color: var(--color-text-sub); margin-bottom: 10px; }
+.authors { font-size: 0.95em; margin-bottom: 8px; }
+.author sup { color: var(--color-accent); font-size: 0.75em; }
+.author-email { font-size: 0.8em; color: var(--color-text-sub); margin-left: 4px; }
+.orcid { font-size: 0.7em; color: var(--color-accent); text-decoration: none; }
+.affiliations { font-size: 0.85em; color: var(--color-text-sub); margin-bottom: 10px; }
+.affiliation { margin-bottom: 2px; }
+.article-meta { font-size: 0.8em; color: var(--color-text-sub); margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+
+/* ── 摘要 ── */
+.abstract { border-left: 3px solid var(--color-accent); padding: 10px 16px; margin: 16px 0; background: #f8f9fa; }
+.abstract h2 { font-size: 1em; font-weight: 700; margin-bottom: 6px; color: var(--color-accent); }
+.abstract p { text-indent: 0; }
+.abstract-en { border-left-color: #666; }
+
+/* ── 关键词 ── */
+.keywords { font-size: 0.85em; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+.keywords strong { margin-right: 8px; }
+.keywords-en { margin-top: -16px; }
+
+/* ── 章节 ── */
+.section { margin: 20px 0; }
+.section-title { font-family: var(--font-heading); font-weight: 700; margin-bottom: 10px; }
+.level-1 > .section-title { font-size: 1.2em; margin-top: 24px; }
+.level-2 > .section-title { font-size: 1.1em; }
+.level-3 > .section-title { font-size: 1.05em; }
+.level-4 > .section-title,
+.level-5 > .section-title,
+.level-6 > .section-title { font-size: 1em; }
+.section p { text-indent: 2em; margin-bottom: 8px; }
+
+/* ── 图表 ── */
+.figure { text-align: center; margin: 20px 0; padding: 12px; border: 1px solid var(--color-border); border-radius: 4px; }
+.figure img { max-width: 100%; height: auto; }
+.fig-label, .tbl-label { font-weight: 700; }
+.figure figcaption, .table-caption { font-size: 0.85em; color: var(--color-text-sub); margin-top: 6px; }
+
+.table-wrap { margin: 20px 0; }
+.data-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 0.85em; }
+.data-table th, .data-table td { border: 1px solid var(--color-border); padding: 6px 10px; text-align: left; }
+.data-table thead { background: #f5f5f5; }
+
+/* ── 公式 ── */
+.formula-wrap { text-align: center; margin: 20px 0; padding: 8px; }
+.formula-wrap svg { max-width: 100%; height: auto; }
+.formula-label { text-align: right; font-size: 0.85em; color: var(--color-text-sub); }
+.inline-formula svg { vertical-align: middle; max-height: 1.4em; display: inline-block; }
+.inline-formula .formula-mathml { display: inline; }
+
+/* ── 交叉引用 ── */
+.xref { color: var(--color-accent); text-decoration: none; }
+.xref:hover { text-decoration: underline; }
+
+/* ── 参考文献 ── */
+.references { margin-top: 30px; padding-top: 20px; border-top: 2px solid var(--color-border); }
+.references h2 { font-size: 1.2em; margin-bottom: 16px; }
+.reference-item { font-size: 0.85em; margin-bottom: 8px; padding-left: 8px; text-indent: -8px; }
+.ref-doi { color: var(--color-accent); font-size: 0.85em; }
+.references ol { padding-left: 24px; }
+
+/* ── 双栏 ── */
+body.two-column .article-body { column-count: 2; column-gap: 24px; }
+body.two-column .abstract,
+body.two-column .figure,
+body.two-column .table-wrap,
+body.two-column .formula-wrap,
+body.two-column .references { column-span: all; }
+
+/* ── 打印 ── */
+@media print {
+  body { padding: 0; font-size: 10pt; }
+}
+</style>
+</head>
+<body class="{% if two_column %}two-column{% endif %}">
+
+<div class="article-body">
+
+  <!-- 文章头部 -->
+  <header>
+    {% if article.journal %}
+    <div class="journal-name">{{ article.journal }}</div>
+    {% endif %}
+    <h1 class="article-title">{{ article.title }}</h1>
+    {% if article.subtitle %}
+    <p class="article-subtitle">{{ article.subtitle }}</p>
+    {% endif %}
+
+    {% if has_authors %}
+    <div class="authors">
+      {% for author in article.authors %}
+      <span class="author">
+        {{ author.surname }}{{ author.given_name }}
+        {% if author.affiliation %}<sup>{{ author.affiliation }}</sup>{% endif %}
+        {% if not loop.last %}, {% endif %}
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if article.doi %}
+    <div class="article-meta">DOI: {{ article.doi }}</div>
+    {% endif %}
+  </header>
+
+  <!-- 摘要 -->
+  {% if article.abstract %}
+  <section class="abstract">
+    <h2>{% if article.lang == 'en' %}Abstract{% else %}摘　要{% endif %}</h2>
+    <p>{{ article.abstract }}</p>
+  </section>
+  {% endif %}
+  {% if article.abstract_en %}
+  <section class="abstract abstract-en">
+    <h2>ABSTRACT</h2>
+    <p>{{ article.abstract_en }}</p>
+  </section>
+  {% endif %}
+
+  <!-- 关键词 -->
+  {% if has_keywords %}
+  <section class="keywords">
+    <strong>{% if article.lang == 'en' %}Keywords:{% else %}关键词：{% endif %}</strong>{{ article.keywords | join("；") }}
+  </section>
+  {% endif %}
+
+  {# ── 行内公式宏 ── #}
+  {% macro inline_fm(fm) -%}
+  <span class="inline-formula">{% if fm.mathml %}{% if fm.is_svg %}{{ fm.mathml | safe }}{% else %}<span class="formula-mathml">{{ fm.mathml | safe }}</span>{% endif %}{% elif fm.latex %}\({{ fm.latex }}\){% endif %}</span>
+  {%- endmacro %}
+
+  {# ── 参考文献格式宏 ── #}
+  {% macro ref_elsevier(ref) -%}
+    {% if ref.authors %}{{ ref.authors }}. {% endif %}{% if ref.title %}{{ ref.title }}. {% endif %}{% if ref.journal %}<em>{{ ref.journal }}</em>,{% endif %}{% if ref.volume %} vol. {{ ref.volume }},{% endif %}{% if ref.issue %} ({{ ref.issue }}),{% endif %}{% if ref.pages %} pp. {{ ref.pages }},{% endif %}{% if ref.year %} ({{ ref.year }}).{% endif %}{% if ref.doi %} <a href="https://doi.org/{{ ref.doi }}" class="ref-doi" target="_blank">doi:{{ ref.doi }}</a>{% endif %}
+  {%- endmacro %}
+
+  {% macro ref_gbt(ref) -%}
+    {% set gtype = {'journal':'J','book':'M','conference':'C','thesis':'D','web':'EB/OL'}.get(ref.pub_type, 'J') -%}
+    {% if ref.authors %}{{ ref.authors }}. {% endif %}{% if ref.title %}{{ ref.title }}[{{ gtype }}]. {% endif %}{% if ref.journal %}{{ ref.journal }}, {% endif %}{% if ref.year %}{{ ref.year }}{% endif %}{% if ref.volume %}, {{ ref.volume }}{% endif %}{% if ref.issue %}({{ ref.issue }}){% endif %}{% if ref.pages %}: {{ ref.pages }}.{% endif %}{% if ref.doi %} DOI: {{ ref.doi }}.{% endif %}
+  {%- endmacro %}
+
+  {# ── 章节递归 ── #}
+  {% macro render_section(section, number) %}
+  <section class="section level-{{ section.level }}" id="sec-{{ number }}">
+    <h{{ [section.level + 1, 6] | min }} class="section-title">{{ number }}&ensp;{{ section.title }}</h{{ [section.level + 1, 6] | min }}>
+    {% for para in section.paragraphs %}
+    <p>{% for run in para.runs %}{% if run.kind == 'xref' %}<a href="#{{ article.xref_anchor(run.rid) }}" class="xref xref-{{ run.ref_type }}">{{ article.xref_label(run.rid, run.text) }}</a>{% elif run.kind == 'formula' %}{{ inline_fm(run.formula) }}{% else %}{{ run.text }}{% endif %}{% endfor %}</p>
+    {% endfor %}
+  </section>
+  {% for fig in section.figures %}
+  <figure class="figure" id="{{ fig.id or 'fig-' ~ fig.number }}">
+    {% if fig.graphic_href %}<img src="{{ fig.graphic_href | resolve_image }}" alt="{{ fig.caption }}" loading="lazy">{% endif %}
+    <figcaption><span class="fig-label">{{ fig.label }}</span>&ensp;{{ fig.caption }}</figcaption>
+  </figure>
+  {% endfor %}
+  {% for tbl in section.tables %}
+  <div class="table-wrap" id="{{ tbl.id or 'tab-' ~ tbl.number }}">
+    <p class="table-caption"><span class="tbl-label">{{ tbl.label }}</span>&ensp;{{ tbl.caption }}</p>
+    <table class="data-table">
+      {% if tbl.headers %}
+      <thead><tr>{% for h in tbl.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+      {% endif %}
+      <tbody>{% for row in tbl.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% endfor %}
+  {% for fm in section.formulas if not fm.is_inline %}
+  <div class="formula-wrap" id="{{ fm.id or 'eq-' ~ fm.number }}">
+    {% if fm.mathml %}{% if fm.is_svg %}{{ fm.mathml | safe }}{% else %}<span class="formula-mathml">{{ fm.mathml | safe }}</span>{% endif %}{% elif fm.latex %}<div class="formula">$${{ fm.latex }}$$</div>{% endif %}
+    <p class="formula-label">{{ fm.label }}</p>
+  </div>
+  {% endfor %}
+  {% for sub in section.subsections %}
+  {{ render_section(sub, number ~ "." ~ loop.index) }}
+  {% endfor %}
+  {% endmacro %}
+
+  {% for section in article.sections %}
+  {{ render_section(section, loop.index | string) }}
+  {% endfor %}
+
+  <!-- 参考文献 -->
+  {% if has_references %}
+  <section class="references" id="references">
+    <h2>{% if article.lang == 'en' %}References{% else %}参考文献{% endif %}</h2>
+    <ol>
+      {% for ref in article.references %}
+      <li id="{{ ref.id }}" class="reference-item">
+        {% if ref_style == 'gbt7714' %}{{ ref_gbt(ref) }}{% else %}{{ ref_elsevier(ref) }}{% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+
+</div><!-- .article-body -->
+
+<!-- MathJax 3.x 客户端回退：当服务器端 mathjax-node 不可用时，浏览器渲染 MathML -->
+<script>
+window.MathJax = {
+  options: {
+    ignoreHtmlClass: 'tex2jax_ignore',
+    processHtmlClass: 'mathjax-process',
+  },
+  startup: {
+    pageReady: function() {
+      var mathmlElements = document.querySelectorAll('.formula-mathml');
+      if (mathmlElements.length > 0) {
+        return MathJax.typesetPromise(mathmlElements);
+      }
+    }
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/mml-chtml.js" async></script>
+
+</body>
+</html>

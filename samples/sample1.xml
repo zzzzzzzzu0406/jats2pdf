@@ -20,6 +20,7 @@
             <surname>张</surname>
             <given-names>三</given-names>
           </name>
+          <xref ref-type="aff" rid="aff1"/>
           <email>zhangsan@university.edu.cn</email>
         </contrib>
         <contrib contrib-type="author">
@@ -28,11 +29,17 @@
             <surname>李</surname>
             <given-names>四</given-names>
           </name>
+          <xref ref-type="aff" rid="aff2"/>
           <email>lisi@university.edu.cn</email>
         </contrib>
+        <aff id="aff1"><institution>智能文档处理实验室</institution><addr-line>北京</addr-line><country>中国</country></aff>
+        <aff id="aff2"><institution>计算机科学与技术学院</institution><addr-line>上海</addr-line><country>中国</country></aff>
       </contrib-group>
       <abstract>
         <p>学术文档结构识别是文献数字化中的关键任务。本文提出了一种融合LayoutLM与图神经网络的混合架构，用于自动识别学术论文中的章节标题、段落、公式、图表和参考文献等结构元素。在构建的中文学术论文数据集上，该方法在标题层级识别任务中达到96.3%的F1分数，在公式定位任务中达到94.7%的准确率。实验结果表明，图神经网络能有效捕捉文档元素间的空间关系，显著提升了版面分析的鲁棒性。</p>
+      </abstract>
+      <abstract xml:lang="en">
+        <p>Document structure recognition is a key task in literature digitization. This paper proposes a hybrid architecture combining LayoutLM and Graph Neural Networks (GNN) to automatically recognize structural elements in academic papers, including section titles, paragraphs, formulas, figures, tables, and references. On a constructed Chinese academic paper dataset, the method achieves an F1 score of 96.3% on heading hierarchy recognition and 94.7% accuracy on formula localization. Experimental results show that GNN can effectively capture spatial relationships among document elements, significantly improving the robustness of layout analysis.</p>
       </abstract>
       <kwd-group>
         <kwd>文档结构识别</kwd>
@@ -41,6 +48,13 @@
         <kwd>学术文档</kwd>
         <kwd>版面分析</kwd>
       </kwd-group>
+      <kwd-group xml:lang="en">
+        <kwd>document structure recognition</kwd>
+        <kwd>LayoutLM</kwd>
+        <kwd>graph neural network</kwd>
+        <kwd>academic document</kwd>
+        <kwd>layout analysis</kwd>
+      </kwd-group>
     </article-meta>
   </front>
 
@@ -48,7 +62,7 @@
     <sec id="s1">
       <title>引言</title>
       <p>随着学术产出的快速增长，海量学术文献的数字化和结构化成为研究热点。传统的文档处理依赖人工标注和基于规则的方法，难以应对多样化的排版格式。近年来，预训练语言模型和视觉-语言联合模型的发展为文档智能理解开辟了新路径。</p>
-      <p>本文提出了一种融合LayoutLM与图神经网络（GNN）的混合架构，充分利用LayoutLM的跨模态表征能力和GNN的结构关系建模优势。主要贡献包括：（1）设计了一个端到端的学术文档结构识别流水线；（2）提出了基于GNN的文档元素关系建模方法；（3）构建了大规模中文学术论文标注数据集。</p>
+      <p>本文提出了一种融合LayoutLM与图神经网络（GNN）的混合架构，充分利用LayoutLM<xref ref-type="bibr" rid="r1">[1]</xref>的跨模态表征能力和GNN<xref ref-type="bibr" rid="r2 r3">[2,3]</xref>的结构关系建模优势。主要贡献包括：（1）设计了一个端到端的学术文档结构识别流水线；（2）提出了基于GNN的文档元素关系建模方法；（3）构建了大规模中文学术论文标注数据集。</p>
     </sec>
 
     <sec id="s2">
@@ -67,12 +81,17 @@
       <title>方法</title>
       <sec id="s3.1">
         <title>整体架构</title>
-        <p>本文提出的混合架构由三个核心模块组成：文档编码模块、结构关系建模模块和序列标注模块。文档编码模块使用LayoutLMv3提取每个token级别的多模态特征；结构关系建模模块将文档元素组织为图结构，通过多层GAT进行特征增强；序列标注模块使用条件随机场（CRF）进行全局最优标签序列的解码。</p>
+        <p>本文提出的混合架构由三个核心模块组成：文档编码模块、结构关系建模模块和序列标注模块。文档编码模块使用LayoutLMv3提取每个token级别的多模态特征；结构关系建模模块将文档元素组织为图结构，通过多层GAT进行特征增强；序列标注模块使用条件随机场（CRF）进行全局最优标签序列的解码。系统整体架构如<xref ref-type="fig" rid="f1">图1</xref>所示。</p>
+        <fig id="f1">
+          <label>图1</label>
+          <caption><title>本文方法的整体架构示意图</title></caption>
+          <graphic xlink:href="arch.svg"/>
+        </fig>
       </sec>
       <sec id="s3.2">
         <title>图构建策略</title>
         <p>我们将每个文档元素（段落、标题、公式、图表、表格）作为图节点。边的构建遵循三种策略：空间邻近（距离小于阈值δ的节点连边）、视觉对齐（水平或垂直对齐的节点连边）和阅读顺序（按阅读顺序相邻的节点连边）。</p>
-        <p>公式如下所示：</p>
+        <p>节点特征更新公式如<xref ref-type="disp-formula" rid="eq1">式(1)</xref>所示：</p>
         <disp-formula id="eq1">
           <label>（1）</label>
           <mml:math>
@@ -95,7 +114,7 @@
             </mml:mrow>
           </mml:math>
         </disp-formula>
-        <p>其中h_i表示节点i的特征表示，N(i)为节点i的邻居集合，α_ij为注意力系数，W为可学习的权重矩阵。</p>
+        <p>其中<inline-formula><mml:math><mml:msub><mml:mi>h</mml:mi><mml:mi>i</mml:mi></mml:msub></mml:math></inline-formula>表示节点i的特征表示，N(i)为节点i的邻居集合，α_ij为注意力系数，W为可学习的权重矩阵。</p>
       </sec>
     </sec>
 
@@ -103,7 +122,7 @@
       <title>实验</title>
       <sec id="s4.1">
         <title>数据集</title>
-        <p>我们从知网（CNKI）和万方数据库中收集了5,000篇中文学术论文，涵盖计算机科学、电子工程、数学、物理学和生物学五个学科。每篇论文由三位标注者独立标注，取两人以上一致的标注作为最终结果。</p>
+        <p>我们从知网（CNKI）和万方数据库中收集了5,000篇中文学术论文，涵盖计算机科学、电子工程、数学、物理学和生物学五个学科。每篇论文由三位标注者独立标注，取两人以上一致的标注作为最终结果。数据集统计信息见<xref ref-type="table" rid="t1">表1</xref>。</p>
         <table-wrap id="t1">
           <label>表1</label>
           <caption>

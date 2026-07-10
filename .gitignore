@@ -34,3 +34,8 @@ samples/output/*.pdf
 # Environment
 .env
 .env.local
+node_modules/
+
+# Server runtime data
+data/
+*.db

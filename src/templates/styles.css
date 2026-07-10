@@ -262,7 +262,7 @@ body {
 }
 
 /* ── 正文段落 ── */
-.article-body p {
+.article-content p {
   text-indent: 2em;
   margin: 0.6rem 0;
   font-size: 17px;
@@ -271,7 +271,7 @@ body {
 }
 
 /* 段落间首尾相接时减少间距 */
-.article-body p + p {
+.article-content p + p {
   margin-top: 0.2rem;
 }
 
@@ -473,7 +473,7 @@ body {
     font-size: 17px;
   }
 
-  .article-body p {
+  .article-content p {
     font-size: 16px;
   }
 
@@ -492,7 +492,7 @@ body {
     font-size: 20px;
   }
 
-  .article-body p {
+  .article-content p {
     text-indent: 1.5em;
     font-size: 15px;
   }
@@ -501,4 +501,111 @@ body {
     padding: 1rem 1.2rem;
     margin: 0 0 1.5rem 0;
   }
+}
+
+/* ════════════════════════════════════════════════════════════
+   打印 / PDF 排版 — WeasyPrint CSS Paged Media
+   选题2：需求6（单/双栏）+ 需求7（页眉页脚/页码）
+   参考《设计规范》：A4、页边距 上2.5/左右2/下2.5cm、首页无页眉
+   ════════════════════════════════════════════════════════════ */
+
+/* ── 页面框：A4 + 页边距 + 页眉(期刊名 | 页码) ── */
+@page {
+  size: A4;
+  margin: 2.5cm 2cm 2.5cm 2cm;
+  @top-left {
+    content: string(journalname);
+    font-family: "Times New Roman", "Noto Serif SC", serif;
+    font-style: italic;
+    font-size: 8pt;
+    color: #666;
+  }
+  @top-right {
+    content: counter(page);
+    font-family: "Times New Roman", serif;
+    font-size: 8pt;
+    color: #666;
+  }
+}
+/* 首页无页眉 */
+@page :first {
+  @top-left { content: ""; }
+  @top-right { content: ""; }
+}
+
+/* 用论文期刊名填充页眉 running header（.journal-name 在 article.html 中）*/
+.journal-name {
+  string-set: journalname content();
+}
+
+/* ── 打印时剥离 Web 平台外壳，只留论文正文 ── */
+@media print {
+  .navbar, .site-footer, .back-to-top, .article-toc, .breadcrumb { display: none !important; }
+  .layout-with-sidebar { display: block !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  .layout-main { width: auto !important; max-width: none !important; }
+  .container { max-width: none !important; }
+  body { background: #fff !important; }
+}
+
+/* ── 需求6：双栏模式（main.py --two-column → body.two-column）── */
+body.two-column .layout-main {
+  column-count: 2;
+  column-gap: 1.4em;
+  column-rule: none;
+}
+/* 标题区/摘要/关键词/图表/公式/参考文献 跨栏（不进双栏流）*/
+body.two-column .article-header,
+body.two-column .abstract,
+body.two-column .keywords,
+body.two-column .figure,
+body.two-column .table-wrap,
+body.two-column .formula-wrap,
+body.two-column .references {
+  column-span: all;
+}
+
+/* ── 难点2：跨页处理 — 图表/公式不跨页、标题不与正文分离 ── */
+.figure, .table-wrap, .formula-wrap { break-inside: avoid; }
+h1, h2, h3, h4 { break-after: avoid; }
+
+/* ════════════════════════════════════════════════════════════
+   打印字号/行距规范（《设计规范》pt 值）+ 新元素样式（需求1/2/4/5）
+   选择器带 .article-content 前缀以保证特异性 ≥ platform.css，PDF 走 pt 字号
+   ════════════════════════════════════════════════════════════ */
+@media print {
+  /* 正文：宋体 10pt、行距 1.6、首行缩进 2em、两端对齐 */
+  .article-content .section p { font-size: 10pt; line-height: 1.6; text-indent: 2em; text-align: justify; }
+  /* 标题：黑体 */
+  .article-content .article-title { font-size: 16pt; font-weight: 700; }
+  .article-content .article-subtitle { font-size: 12pt; }
+  .article-content .level-1 > .section-title { font-size: 12pt; font-weight: 700; }
+  .article-content .level-2 > .section-title { font-size: 11pt; font-weight: 700; }
+  .article-content .level-3 > .section-title { font-size: 10pt; font-weight: 600; }
+  .article-content .level-4 > .section-title,
+  .article-content .level-5 > .section-title,
+  .article-content .level-6 > .section-title { font-size: 10pt; font-weight: 600; }
+  /* 摘要 / 关键词：左右缩进 2em */
+  .article-content .abstract { padding: 1rem 2em; }
+  .article-content .abstract h2 { font-size: 10pt; }
+  .article-content .abstract p { font-size: 10pt; line-height: 1.6; text-indent: 0; }
+  .article-content .keywords, .article-content .keywords strong { font-size: 9.5pt; }
+  /* 作者 / 机构 */
+  .article-content .authors { font-size: 10pt; }
+  .article-content .affiliations { font-size: 8.5pt; color: #555; margin-top: 0.4rem; line-height: 1.5; }
+  .article-content .affiliations sup { color: var(--color-accent); font-weight: 600; }
+  /* 表格 / 参考文献：8.5pt */
+  .article-content .data-table { font-size: 8.5pt; }
+  .article-content .data-table th, .article-content .data-table td { padding: 4px 8px; }
+  .article-content .reference-item { font-size: 8.5pt; padding-left: 2em; text-indent: -2em; line-height: 1.6; }
+
+  /* 嵌入 SVG 公式尺寸约束（防溢出栏宽，需求4）*/
+  .formula-wrap { text-align: center; }
+  .formula-wrap svg { max-width: 100%; height: auto; display: inline-block; vertical-align: middle; }
+  .article-content .section p svg, .inline-formula svg { height: 1em; vertical-align: -0.2em; display: inline-block; }
+.inline-formula .formula-mathml { display: inline; }
+
+  /* 交叉引用链接样式 + 跳转高亮（需求3）*/
+  .xref { color: var(--color-link); text-decoration: none; }
+  .xref:hover { text-decoration: underline; }
+  .figure:target, .table-wrap:target, .formula-wrap:target { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 }

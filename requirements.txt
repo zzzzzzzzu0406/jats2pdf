@@ -18,6 +18,11 @@ lxml>=5.0.0               # JATS XML 解析
 # ── 参考文献 ──
 bibtexparser>=1.4.0       # BibTeX 解析（可选）
 
+# ── Web 服务 ──
+fastapi>=0.110.0          # Web 框架
+uvicorn[standard]>=0.29.0 # ASGI 服务器
+python-multipart>=0.0.9   # 文件上传支持
+
 # ── 开发工具 ──
 pytest>=8.0.0             # 单元测试
 black>=24.0.0             # 代码格式化

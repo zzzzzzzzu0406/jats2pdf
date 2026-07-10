@@ -36,11 +36,11 @@
   --color-success:      #27ae60;
   --color-danger:       #c0392b;
 
-  /* 字体 */
-  --font-heading: "SimHei","黑体","Microsoft YaHei","Noto Sans SC",sans-serif;
-  --font-body:    "SimSun","宋体","Noto Serif SC","Georgia",serif;
-  --font-en:      "Georgia","Times New Roman",serif;
-  --font-mono:    "Consolas","Courier New",monospace;
+  /* 字体（中文优先黑体/宋体；macOS 回退 PingFang/Songti；西文 Times/Georgia）*/
+  --font-heading: "SimHei","黑体","PingFang SC","Microsoft YaHei","Source Han Sans SC","Noto Sans SC",sans-serif;
+  --font-body:    "SimSun","宋体","Songti SC","STSong","Source Han Serif SC","Noto Serif SC","Georgia",serif;
+  --font-en:      "Georgia","Times New Roman","Songti SC",serif;
+  --font-mono:    "Consolas","Menlo","Courier New",monospace;
 
   /* 字号 */
   --text-h1:   2rem;    /* 首页大标题 32px */
@@ -184,10 +184,13 @@ body{
   box-shadow:var(--shadow-sm);
   transition:all var(--transition);
   display:flex;flex-direction:column;gap:var(--space-sm);
+  border-top:3px solid var(--color-accent-light);
+  position:relative;
 }
 .paper-card:hover{
-  transform:translateY(-2px);
+  transform:translateY(-4px);
   box-shadow:var(--shadow-lg);
+  border-top-color:var(--color-highlight);
 }
 .paper-card .card-journal{
   font-family:var(--font-en);font-size:var(--text-2xs);
@@ -329,23 +332,41 @@ body{
 /* ═══════════════ Hero区域（首页） ═══════════════ */
 .hero{
   text-align:center;padding:var(--space-3xl) var(--space-xl);
-  background:linear-gradient(135deg, #f0f4f8 0%, #e8eef4 50%, #f5f2ed 100%);
+  background:linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 55%, var(--color-accent-light) 100%);
+  color:#fff;position:relative;overflow:hidden;
 }
+.hero::before{
+  content:'';position:absolute;top:-40%;right:-10%;width:55%;height:200%;
+  background:radial-gradient(circle, rgba(255,255,255,0.14) 0%, transparent 65%);
+  pointer-events:none;
+}
+.hero::after{
+  content:'';position:absolute;left:-10%;bottom:-50%;width:45%;height:150%;
+  background:radial-gradient(circle, rgba(52,152,219,0.20) 0%, transparent 65%);
+  pointer-events:none;
+}
+.hero>*{position:relative;z-index:1}
 .hero .hero-journal{
   font-family:var(--font-en);font-size:var(--text-xs);
-  color:var(--color-accent);font-style:italic;letter-spacing:2px;
+  color:rgba(255,255,255,0.82);font-style:italic;letter-spacing:3px;
   text-transform:uppercase;margin-bottom:var(--space-md);
 }
 .hero .hero-title{
   font-family:var(--font-heading);font-size:var(--text-h1);
-  font-weight:700;color:var(--color-primary);line-height:1.3;
-  margin-bottom:var(--space-md);max-width:600px;margin-left:auto;margin-right:auto;
+  font-weight:700;color:#fff;line-height:1.3;
+  margin-bottom:var(--space-md);max-width:640px;margin-left:auto;margin-right:auto;
+  text-shadow:0 2px 10px rgba(0,0,0,0.18);
 }
 .hero .hero-subtitle{
-  font-size:var(--text-sm);color:var(--color-text-sub);
-  max-width:500px;margin:0 auto var(--space-xl) auto;
+  font-size:var(--text-sm);color:rgba(255,255,255,0.88);
+  max-width:540px;margin:0 auto var(--space-xl) auto;
 }
 .hero .hero-actions{display:flex;gap:var(--space-md);justify-content:center;flex-wrap:wrap}
+/* hero 内按钮在深色背景上的反色 */
+.hero .btn-primary{background:#fff;color:var(--color-primary)}
+.hero .btn-primary:hover{background:#f0f7fc;transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.hero .btn-outline{border-color:rgba(255,255,255,0.75);color:#fff;background:rgba(255,255,255,0.08)}
+.hero .btn-outline:hover{background:rgba(255,255,255,0.2);color:#fff}
 
 /* ═══════════════ 区块标题 .section-heading ═══════════════ */
 .section-heading{
@@ -474,6 +495,10 @@ body{
 .article-content .level-2>.section-title{
   font-size:1.125rem;margin:var(--space-lg) 0 var(--space-sm) 0;
 }
+.article-content .level-3>.section-title{font-size:1rem;font-weight:600;margin:var(--space-md) 0 var(--space-xs) 0}
+.article-content .level-4>.section-title,
+.article-content .level-5>.section-title,
+.article-content .level-6>.section-title{font-size:0.9375rem;font-weight:600;color:var(--color-text-sub);margin:var(--space-md) 0 var(--space-xs) 0}
 .article-content p{text-indent:2em;margin:0.6rem 0}
 .article-content .data-table{width:100%;border-collapse:collapse}
 .article-content .data-table thead{background:var(--color-primary);color:#fff}
@@ -498,6 +523,20 @@ body{
 }
 .article-content .figure figcaption{font-size:var(--text-xs);margin-top:var(--space-sm);color:var(--color-text-sub)}
 .article-content .formula-wrap{margin:var(--space-lg) 0;text-align:center;padding:var(--space-md)}
+/* 机构列表 */
+.article-content .affiliations{font-size:var(--text-2xs);color:var(--color-text-light);margin-top:var(--space-sm);line-height:1.7}
+.article-content .affiliations sup{color:var(--color-accent);font-weight:600}
+/* 交叉引用链接 */
+.article-content .xref{color:var(--color-accent-light);text-decoration:none;border-bottom:1px dotted var(--color-accent-light)}
+.article-content .xref:hover{color:var(--color-accent);border-bottom-style:solid}
+/* 英文摘要/关键词 */
+.article-content .abstract-en{background:linear-gradient(135deg,#f8fbfd,#eef4f8);border-left-color:var(--color-highlight);margin-top:calc(-1 * var(--space-md))}
+.article-content .abstract-en h2{color:var(--color-accent);letter-spacing:1px}
+.article-content .keywords-en{color:var(--color-text-light)}
+/* 行内公式 SVG */
+.article-content .inline-formula svg{height:1em;vertical-align:-0.2em}
+/* 图片自适应 */
+.article-content .figure img{max-width:100%;height:auto;border-radius:var(--radius-sm);margin:0 auto;display:block}
 .article-content .references{
   margin-top:var(--space-2xl);padding-top:var(--space-lg);
   border-top:2px solid var(--color-border);

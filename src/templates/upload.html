@@ -30,15 +30,15 @@
     <div class="settings-group">
       <div class="settings-label">排版栏数</div>
       <label style="margin-right:var(--space-md);cursor:pointer">
-        <input type="radio" name="columns" value="single" checked> 单栏
+        <input type="radio" name="columns" value="single" checked onchange="onSettingsChange()"> 单栏
       </label>
       <label style="cursor:pointer">
-        <input type="radio" name="columns" value="double"> 双栏
+        <input type="radio" name="columns" value="double" onchange="onSettingsChange()"> 双栏
       </label>
     </div>
     <div class="settings-group">
       <div class="settings-label">正文字号</div>
-      <select>
+      <select id="setting-font-size" onchange="onSettingsChange()">
         <option value="small">小号 (15px)</option>
         <option value="medium" selected>中号 (17px)</option>
         <option value="large">大号 (19px)</option>
@@ -46,59 +46,227 @@
     </div>
     <div class="settings-group">
       <div class="settings-label">期刊风格</div>
-      <select>
+      <select id="setting-ref-style" onchange="onSettingsChange()">
         <option value="elsevier" selected>Elsevier 风格</option>
-        <option value="springer">Springer 风格</option>
-        <option value="ieee">IEEE 风格</option>
+        <option value="gbt7714">GB/T 7714 风格</option>
       </select>
     </div>
   </div>
 
   <!-- ── 操作按钮 ── -->
   <div style="text-align:center;margin-top:var(--space-xl);display:flex;gap:var(--space-md);justify-content:center;flex-wrap:wrap">
-    <button class="btn btn-primary" onclick="handleConvert()">开始转换</button>
-    <button class="btn btn-outline" onclick="handlePreview()">预览效果</button>
-    <button class="btn btn-outline" onclick="handleDownload()">下载 HTML</button>
+    <button class="btn btn-primary" id="btn-convert" onclick="handleConvert()">开始转换</button>
+    <button class="btn btn-outline" id="btn-preview" onclick="handlePreview()" disabled>预览效果</button>
+    <button class="btn btn-outline" id="btn-download-html" onclick="handleDownload('html')" disabled>下载 HTML</button>
+    <button class="btn btn-outline" id="btn-download-pdf" onclick="handleDownload('pdf')" disabled>下载 PDF</button>
   </div>
+
+  <!-- ── 加载指示器 ── -->
+  <div id="loading-indicator" style="display:none;text-align:center;margin-top:var(--space-lg)">
+    <div style="display:inline-block;width:40px;height:40px;border:3px solid var(--color-border);border-top-color:var(--color-accent);border-radius:50%;animation:spin 1s linear infinite"></div>
+    <p style="color:var(--color-text-sub);margin-top:var(--space-sm);font-size:var(--text-sm)">正在转换中...（含公式渲染可能需要数十秒）</p>
+  </div>
+  <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
 
   <!-- ── 预览区 ── -->
   <div class="preview-area" style="margin-top:var(--space-2xl)">
-    <div class="preview-placeholder" id="preview-placeholder">
-      上传并转换 JATS XML 后，排版效果将在此处实时预览
+    <div class="preview-placeholder" id="preview-placeholder" style="display:flex;align-items:center;justify-content:center;min-height:300px;color:var(--color-text-light);font-size:var(--text-sm);border:2px dashed var(--color-border);border-radius:8px;background:#fafbfc">
+      <div style="text-align:center">
+        <div style="font-size:3rem;margin-bottom:var(--space-md)">📄</div>
+        <div>上传并转换 JATS XML 后，排版效果将在此处实时预览</div>
+      </div>
     </div>
-    <iframe id="preview-frame" style="display:none;width:100%;height:600px;border:none" sandbox="allow-scripts allow-same-origin"></iframe>
+    <div id="preview-container" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-sm)">
+        <span style="font-size:var(--text-sm);font-weight:600;color:var(--color-accent)">📋 排版预览</span>
+        <span style="font-size:var(--text-2xs);color:var(--color-text-light)">可在上方调整栏数、字号、风格后实时刷新</span>
+      </div>
+      <iframe id="preview-frame" style="width:100%;min-height:800px;border:1px solid var(--color-border);border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.08);background:#fff" sandbox="allow-scripts allow-same-origin"></iframe>
+    </div>
   </div>
 </div>
 
 <script>
-// 上传页额外交互（在 platform.js 基础上）
+// ── 上传页交互逻辑 ──
+var currentArticleId = null;
+var currentFile = null;
+
+// 获取当前设置
+function getSettings() {
+  var columns = document.querySelector('input[name="columns"]:checked');
+  var fontSize = document.getElementById('setting-font-size');
+  var refStyle = document.getElementById('setting-ref-style');
+  return {
+    two_column: columns ? columns.value === 'double' : false,
+    font_size: fontSize ? fontSize.value : 'medium',
+    ref_style: refStyle ? refStyle.value : 'elsevier'
+  };
+}
+
+// 设置变更时自动刷新预览
+function onSettingsChange() {
+  if (currentArticleId) {
+    handlePreview();
+  }
+}
+
+// 显示/隐藏加载状态
+function showLoading(show) {
+  var spinner = document.getElementById('loading-indicator');
+  if (spinner) spinner.style.display = show ? 'block' : 'none';
+}
+
+// 启用/禁用按钮
+function setButtonsEnabled(enabled) {
+  ['btn-preview', 'btn-download-html', 'btn-download-pdf'].forEach(function(id) {
+    var btn = document.getElementById(id);
+    if (btn) btn.disabled = !enabled;
+  });
+}
+
+// 上传并转换
 function handleConvert() {
-  var fileInput = document.getElementById('file-input');
-  var status = document.getElementById('upload-status');
-  if (!fileInput.files || fileInput.files.length === 0) {
-    status.innerHTML = '<span style="color:var(--color-danger)">请先选择要上传的 JATS XML 文件</span>';
+  // 优先使用拖拽选择的文件，其次使用 file input
+  var file = currentFile;
+  if (!file) {
+    var fileInput = document.getElementById('file-input');
+    if (!fileInput.files || fileInput.files.length === 0) {
+      showStatus('请先选择要上传的 JATS XML 文件', 'danger');
+      return;
+    }
+    file = fileInput.files[0];
+  }
+
+  showStatus('正在上传并转换...', 'info');
+  showLoading(true);
+
+  var formData = new FormData();
+  formData.append('file', file);
+
+  fetch('/api/upload', { method: 'POST', body: formData })
+    .then(function(resp) {
+      if (!resp.ok) return resp.json().then(function(err) { throw new Error(err.detail || '上传失败'); });
+      return resp.json();
+    })
+    .then(function(data) {
+      showLoading(false);
+      currentArticleId = data.article_id;
+      setButtonsEnabled(true);
+      showStatus('转换成功！共 ' + data.ref_count + ' 篇参考文献', 'success');
+
+      // 自动加载预览（使用设置面板的当前参数）
+      handlePreview();
+
+      // 更新设置选项：根据论文语言预设
+      if (data.lang === 'en') {
+        document.getElementById('setting-ref-style').value = 'elsevier';
+      }
+    })
+    .catch(function(err) {
+      showLoading(false);
+      showStatus('转换失败: ' + err.message, 'danger');
+    });
+}
+
+// 预览（含当前设置）
+function handlePreview() {
+  if (!currentArticleId) {
+    showStatus('请先上传并转换论文', 'danger');
     return;
   }
-  status.innerHTML = '<span style="color:var(--color-success)">正在转换... (实际部署时由后端处理)</span>';
-  handlePreview();
+
+  var settings = getSettings();
+  var params = new URLSearchParams({
+    ref_style: settings.ref_style,
+    two_column: settings.two_column,
+    font_size: settings.font_size
+  });
+
+  showLoading(true);
+  fetch('/api/articles/' + currentArticleId + '/preview?' + params.toString())
+    .then(function(resp) {
+      if (!resp.ok) throw new Error('预览加载失败');
+      return resp.text();
+    })
+    .then(function(html) {
+      showLoading(false);
+      var frame = document.getElementById('preview-frame');
+      var placeholder = document.getElementById('preview-placeholder');
+      var container = document.getElementById('preview-container');
+      frame.srcdoc = html;
+      container.style.display = 'block';
+      placeholder.style.display = 'none';
+      // 自适应高度：内容加载后调整 iframe 高度
+      frame.onload = function() {
+        try {
+          var doc = frame.contentDocument || frame.contentWindow.document;
+          var h = doc.documentElement.scrollHeight;
+          frame.style.height = Math.max(800, h + 40) + 'px';
+        } catch(e) {}
+      };
+    })
+    .catch(function(err) {
+      showLoading(false);
+      showStatus('预览失败: ' + err.message, 'danger');
+    });
 }
 
-function handlePreview() {
-  var frame = document.getElementById('preview-frame');
-  var placeholder = document.getElementById('preview-placeholder');
-  // 实际部署时，这里会显示后端渲染的论文预览
-  // 暂时展示提示信息
-  var previewHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--color-text-sub);font-size:var(--text-sm);text-align:center;padding:var(--space-xl)">' +
-    '预览功能已就绪<br><small>实际部署时，上传的XML将由Python后端解析并在iframe中渲染论文排版效果</small></div>';
-  frame.srcdoc = previewHTML;
-  frame.style.display = 'block';
-  placeholder.style.display = 'none';
+// 下载 HTML 或 PDF
+function handleDownload(format) {
+  if (!currentArticleId) {
+    showStatus('请先上传并转换论文', 'danger');
+    return;
+  }
+
+  var settings = getSettings();
+  var params = new URLSearchParams({
+    ref_style: settings.ref_style,
+    two_column: settings.two_column
+  });
+
+  var url = '/api/articles/' + currentArticleId + '/' + format + '?' + params.toString();
+  showStatus('正在生成 ' + format.toUpperCase() + '，下载即将开始...', 'success');
+
+  // 触发浏览器下载
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
-function handleDownload() {
+// 状态显示
+function showStatus(msg, type) {
   var status = document.getElementById('upload-status');
-  status.innerHTML = '<span style="color:var(--color-success)">HTML 下载功能已就绪（实际部署时触发下载）</span>';
+  if (!status) return;
+  var colors = { success: 'var(--color-success)', danger: 'var(--color-danger)', info: 'var(--color-accent)' };
+  status.innerHTML = '<span style="color:' + (colors[type] || colors.info) + '">' + msg + '</span>';
 }
+
+// ── 文件选择监听（与 platform.js 拖拽协同）──
+document.addEventListener('DOMContentLoaded', function() {
+  var fileInput = document.getElementById('file-input');
+  if (fileInput) {
+    fileInput.addEventListener('change', function() {
+      if (this.files && this.files.length > 0) {
+        currentFile = this.files[0];
+        var status = document.getElementById('upload-status');
+        if (status) {
+          status.innerHTML = '<span style="color:var(--color-success)">已选择: ' + this.files[0].name + ' (' + (this.files[0].size/1024).toFixed(1) + ' KB)</span>';
+        }
+        // 自动转换
+        handleConvert();
+      }
+    });
+  }
+
+  // 全局函数：供 platform.js 拖拽后调用
+  window.setUploadFile = function(file) {
+    currentFile = file;
+    handleConvert();
+  };
+});
 </script>
 
 {% endblock %}

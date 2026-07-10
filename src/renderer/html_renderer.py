@@ -26,6 +26,16 @@ class HTMLRenderer:
         )
         self.env.filters["orcid_url"] = lambda o: f"https://orcid.org/{o}" if o else "#"
 
+        def _resolve_image(href: str) -> str:
+            if not href:
+                return href
+            if href.startswith(("http://", "https://", "data:", "//")):
+                return href
+            safe = os.path.basename(href)
+            return f"/api/files/{safe}" if safe else href
+
+        self.env.filters["resolve_image"] = _resolve_image
+
     def _read_css(self) -> str:
         """读取 platform.css"""
         css_path = os.path.join(_ASSETS_DIR, "css", "platform.css")
@@ -49,9 +59,20 @@ class HTMLRenderer:
         template = self.env.get_template(template_name)
         return template.render(inline_css=css, inline_js=js, **context)
 
+    # ── 通用入口（CLI / 测试使用） ──
+
+    def render(self, article: Article, ref_style: str = "elsevier") -> str:
+        """渲染单篇论文为自包含 HTML。
+
+        v3.0 重构后渲染器拆分为多页面方法（render_article/render_index/...），
+        此方法作为 CLI（main.py）与单元测试的统一入口，转发到论文详情页。
+        ref_style: 参考文献格式，elsevier（默认）或 gbt7714。
+        """
+        return self.render_article(article, ref_style=ref_style)
+
     # ── 各页面渲染方法 ──
 
-    def render_article(self, article: Article) -> str:
+    def render_article(self, article: Article, ref_style: str = "elsevier") -> str:
         """渲染论文详情页"""
         return self._render_page("article.html", {
             "article": article,
@@ -60,6 +81,7 @@ class HTMLRenderer:
             "has_references": bool(article.references),
             "active_page": "browse",
             "journal_name": article.journal or None,
+            "ref_style": ref_style,
         })
 
     def render_index(self, articles: list[Article], journal_name: str = "") -> str:

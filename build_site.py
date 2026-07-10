@@ -24,6 +24,14 @@ def build_all():
     article.journal = "计算机学报"
     print(f"   OK: {article.title[:40]}...")
 
+    # 公式预渲染 MathML→SVG（需 Node.js + mathjax-node，详见 src/renderer/formula_renderer.py）
+    try:
+        from src.renderer.formula_renderer import FormulaRenderer
+        FormulaRenderer(method="auto").process_article_formulas(article)
+        print("   OK: formulas pre-rendered to SVG")
+    except Exception as e:
+        print(f"   SKIP formula pre-render: {e}")
+
     renderer = HTMLRenderer()
 
     # ── 1. 首页 ──

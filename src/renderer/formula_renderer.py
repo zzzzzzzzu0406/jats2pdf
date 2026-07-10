@@ -1,183 +1,174 @@
 """
-公式预渲染工具
-=============
-赛题要求：数学公式的 MathML 格式高保真渲染
+公式预渲染：MathML / LaTeX → SVG（经 mathjax-node）
+=================================================
+赛题要求：数学公式（MathML 格式）的高保真渲染。
 
-问题：WeasyPrint 不支持 JavaScript，无法执行 MathJax。
-解决方案：先用 MathJax-node CLI 将 MathML/LaTeX 预渲染为 SVG，
-         再把 SVG 嵌入 HTML，WeasyPrint 完美渲染 SVG。
+问题：WeasyPrint 不执行 JavaScript、也不渲染 MathML；若直接把 <mml:math> 塞进
+HTML，PDF 里公式会退化成裸文本堆叠（h i σ W ...），结构丢失。
 
-工作流程：
-  1. 从 JATS XML 中提取 MathML / LaTeX
-  2. 调用 mathjax-node-cli 转为 SVG
-  3. 将 SVG 嵌入 HTML 模板
-  4. WeasyPrint 渲染 HTML → PDF
+方案：先用 mathjax-node 把 MathML/LaTeX 预渲染为矢量 SVG，再写回 Formula.mathml，
+模板 `{{ fm.mathml | safe }}` 即输出 <svg>，WeasyPrint 完美渲染矢量 SVG。
 
-依赖：需要安装 Node.js 和 mathjax-node-cli
-      npm install -g mathjax-node-cli
+依赖：Node.js + mathjax-node。
+  ⚠ mathjax-node 对含非 ASCII 字符的安装路径有 bug（内部会把路径 URL 编码导致
+    找不到 MathJax.js），故需装在无中文路径下：
+      mkdir -p ~/mjnode && cd ~/mjnode && npm install mathjax-node
+  本模块会在该目录自举生成辅助脚本 mathml2svg.js。
+  可用环境变量 JATS2PDF_MJDIR 指定目录（默认 ~/mjnode）。
 """
 
+import os
+import shutil
 import subprocess
 import tempfile
-import os
 import logging
-from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
+# mathjax-node 调用脚本：读入公式文件 → 输出 SVG 到 stdout
+_HELPER_JS = r'''#!/usr/bin/env node
+const fs = require('fs');
+const mj = require('mathjax-node');
+mj.start();
+const inp = process.argv[2];
+const fmt = process.argv[3] || 'MathML';
+const math = fs.readFileSync(inp, 'utf8').trim();
+mj.typeset({ math: math, format: fmt, svg: true }).then(r => {
+  if (r && r.svg) { process.stdout.write(r.svg); process.exit(0); }
+  process.stderr.write('no svg produced\n'); process.exit(1);
+}).catch(e => { process.stderr.write(String(e) + '\n'); process.exit(2); });
+'''
+
+
+def _mj_dir() -> str:
+    """mathjax-node 安装目录（无中文路径）。"""
+    return os.environ.get("JATS2PDF_MJDIR") or os.path.expanduser("~/mjnode")
+
+
+def _helper_script() -> str:
+    return os.path.join(_mj_dir(), "mathml2svg.js")
+
+
+def _ensure_helper():
+    """若辅助脚本不存在则自举创建（需 mathjax-node 已装在该目录）。"""
+    p = _helper_script()
+    if not os.path.exists(p):
+        try:
+            os.makedirs(_mj_dir(), exist_ok=True)
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(_HELPER_JS)
+            logger.info(f"已生成公式预渲染脚本: {p}")
+        except OSError as e:
+            logger.warning(f"无法创建公式预渲染脚本 {p}: {e}")
+    return p
+
+
 class FormulaRenderer:
-    """将 MathML / LaTeX 公式预渲染为 SVG"""
+    """将 MathML / LaTeX 预渲染为 SVG（经 mathjax-node）。"""
 
     def __init__(self, method: str = "auto"):
         """
         Args:
-            method: 渲染方式
-                - "mathjax-node": 使用 mathjax-node-cli（推荐）
-                - "katex": 使用 katex CLI
-                - "auto": 自动检测可用工具
+            method: "mathjax-node"（强制）/"auto"（自动检测）/ "passthrough"（原样）
         """
         self.method = self._detect_method(method)
 
     def _detect_method(self, method: str) -> str:
-        """检测可用的公式渲染工具"""
+        """检测可用的公式渲染工具；passthrough 表示原样输出 MathML。"""
         if method != "auto":
             return method
-
-        # 优先检测 mathjax-node-cli
+        if not shutil.which("node"):
+            logger.warning("⚠️ 未找到 Node.js，公式将原样输出 MathML（WeasyPrint 不渲染）")
+            return "passthrough"
+        helper = _ensure_helper()
+        if not os.path.exists(helper):
+            logger.warning("⚠️ 未找到公式预渲染脚本，公式原样输出")
+            return "passthrough"
+        # 实测一次最小 MathML，确认 mathjax-node 真正可用（而非仅 node 存在）
         try:
-            subprocess.run(
-                ["npx", "mathjax-node-cli", "--version"],
-                capture_output=True, timeout=10,
+            svg = self._run_helper(
+                '<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>x</mi></math>',
+                "MathML",
             )
-            logger.info("✅ 检测到 mathjax-node-cli")
-            return "mathjax-node"
-        except Exception:
-            pass
-
-        # 回退到本地 MathJax（如果安装了 node_modules）
-        if os.path.exists("node_modules/mathjax"):
-            logger.info("✅ 检测到本地 mathjax")
-            return "mathjax-local"
-
-        logger.warning("⚠️ 未找到公式渲染工具，将直接嵌入MathML（WeasyPrint可能有兼容性问题）")
+            if svg and svg.strip().startswith("<svg"):
+                logger.info("✅ 检测到 mathjax-node（MathML→SVG 可用）")
+                return "mathjax-node"
+            logger.warning("⚠️ mathjax-node 未产出 SVG，公式原样输出；请确认已 `npm install mathjax-node` 于 %s", _mj_dir())
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"⚠️ mathjax-node 检测失败({e})，公式原样输出")
         return "passthrough"
 
-    def mathml_to_svg(self, mathml: str) -> str:
-        """
-        将 MathML 字符串渲染为 SVG
+    def _run_helper(self, math_str: str, fmt: str) -> str:
+        """调用 node mathml2svg.js 把公式转为 SVG，返回 SVG 字符串（失败返回空串）。"""
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".mml", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(math_str)
+            tmp = f.name
+        try:
+            r = subprocess.run(
+                ["node", _helper_script(), tmp, fmt],
+                capture_output=True, text=True, timeout=30,
+            )
+            if r.returncode == 0 and r.stdout.strip().startswith("<svg"):
+                return r.stdout.strip()
+            if r.stderr:
+                logger.debug(f"mathjax-node stderr: {r.stderr.strip()[:200]}")
+            return ""
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.debug(f"mathjax-node 调用异常: {e}")
+            return ""
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
-        Args:
-            mathml: MathML 标记字符串
-
-        Returns:
-            SVG 字符串（可直接嵌入 HTML）
-        """
+    def mathml_to_svg(self, mathml: str, inline: bool = False) -> str:
+        """MathML → SVG。passthrough 模式原样返回。"""
         if self.method == "passthrough":
-            return mathml  # 原样返回 MathML
-
-        if self.method == "mathjax-node":
-            return self._render_with_mathjax_node(mathml, input_type="mml")
-
-        return mathml
+            return mathml
+        svg = self._run_helper(mathml, "MathML")
+        return svg or mathml
 
     def latex_to_svg(self, latex: str, display: bool = True) -> str:
-        """
-        将 LaTeX 字符串渲染为 SVG
-
-        Args:
-            latex: LaTeX 公式字符串
-            display: True=块级公式, False=行内公式
-
-        Returns:
-            SVG 字符串
-        """
+        """LaTeX → SVG。"""
         if self.method == "passthrough":
-            # 直接返回 LaTeX + MathJax 标记
-            delimiter = "$$" if display else "$"
-            return f"{delimiter}{latex}{delimiter}"
-
-        if self.method == "mathjax-node":
-            return self._render_with_mathjax_node(latex, input_type="tex")
-
-        return latex
-
-    def _render_with_mathjax_node(self, formula: str, input_type: str = "mml") -> str:
-        """
-        使用 mathjax-node-cli 渲染公式为 SVG
-
-        Args:
-            formula: MathML 或 LaTeX 字符串
-            input_type: "mml" 或 "tex"
-
-        Returns:
-            SVG 字符串
-        """
-        try:
-            # 将公式写入临时文件
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=f".{input_type}", delete=False, encoding="utf-8"
-            ) as f:
-                f.write(formula)
-                temp_input = f.name
-
-            # 调用 mathjax-node-cli
-            result = subprocess.run(
-                [
-                    "npx", "mathjax-node-cli",
-                    "--input", input_type,
-                    "--output", "svg",
-                    "--inline", "true" if input_type == "tex" else "false",
-                    temp_input,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-
-            # 清理临时文件
-            os.unlink(temp_input)
-
-            if result.returncode == 0:
-                return result.stdout.strip()
-            else:
-                logger.error(f"MathJax 渲染失败: {result.stderr}")
-                return formula  # 回退
-
-        except FileNotFoundError:
-            logger.warning("⚠️ mathjax-node-cli 未安装，运行: npm install -g mathjax-node-cli")
-            return formula
-        except Exception as e:
-            logger.error(f"公式渲染异常: {e}")
-            return formula
+            return f"$${latex}$$" if display else f"${latex}$"
+        svg = self._run_helper(latex, "TeX")
+        return svg or (f"$${latex}$$" if display else f"${latex}$")
 
     def process_article_formulas(self, article):
-        """
-        预处理整篇文章的所有公式，将 MathML/LaTeX 转为 SVG
-
-        Args:
-            article: Article 对象（会被原地修改）
-
-        Returns:
-            处理后的 Article 对象
-        """
-        from ..parser.jats_parser import Formula
-
+        """预处理整篇文章公式：块级公式 + 行内公式（段落 FormulaRun）→ SVG。"""
+        # 1) 块级公式（section.formulas 中 is_inline=False）
         for section in self._iter_sections(article.sections):
-            for formula in section.formulas:
-                svg = None
-                if formula.mathml:
-                    svg = self.mathml_to_svg(formula.mathml)
-                elif formula.latex:
-                    svg = self.latex_to_svg(formula.latex)
-                if svg:
-                    # 用 SVG 替换原始标记
-                    formula.mathml = svg
-                    formula.latex = ""
+            for fm in section.formulas:
+                if fm.is_inline:
+                    continue
+                if fm.mathml:
+                    fm.mathml = self.mathml_to_svg(fm.mathml, inline=False)
+                    fm.is_svg = fm.mathml.strip().startswith("<svg")
+                elif fm.latex:
+                    fm.mathml = self.latex_to_svg(fm.latex, display=True)
+                    fm.is_svg = fm.mathml.strip().startswith("<svg")
+        # 2) 行内公式（段落 runs 中的 FormulaRun）
+        for section in self._iter_sections(article.sections):
+            for para in section.paragraphs:
+                for run in para.runs:
+                    if run.kind == "formula" and run.formula is not None:
+                        fm = run.formula
+                        if fm.mathml:
+                            fm.mathml = self.mathml_to_svg(fm.mathml, inline=True)
+                            fm.is_svg = fm.mathml.strip().startswith("<svg")
+                        elif fm.latex:
+                            fm.mathml = self.latex_to_svg(fm.latex, display=False)
+                            fm.is_svg = fm.mathml.strip().startswith("<svg")
         return article
 
     def _iter_sections(self, sections):
-        """递归遍历所有章节"""
+        """递归遍历所有章节。"""
         for section in sections:
             yield section
             yield from self._iter_sections(section.subsections)

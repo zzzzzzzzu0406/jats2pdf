@@ -37,6 +37,7 @@
 (function() {
   var searchInput = document.querySelector('.search-bar input');
   if (!searchInput) return;
+  // 客户端即时过滤
   searchInput.addEventListener('input', function() {
     var query = this.value.toLowerCase().trim();
     var cards = document.querySelectorAll('.paper-card');
@@ -52,6 +53,7 @@
       noResults.style.display = hasResults ? 'none' : 'block';
     }
   });
+  // Enter 键触发客户端过滤（已在首页卡片上生效）
 })();
 
 // ── 筛选面板 ──
@@ -76,12 +78,9 @@
   function getActiveFilters() {
     var active = {};
     checkboxes.forEach(function(cb) {
-      var group = cb.closest('.filter-group');
-      if (!group) return;
-      var label = group.querySelector('.filter-group-label');
-      var groupName = label ? label.textContent.trim() : 'other';
-      if (!active[groupName]) active[groupName] = [];
-      if (cb.checked) active[groupName].push(cb.value);
+      var key = cb.getAttribute('data-filter-key') || 'keywords';
+      if (!active[key]) active[key] = [];
+      if (cb.checked) active[key].push(cb.value.trim().toLowerCase());
     });
     return active;
   }
@@ -89,21 +88,26 @@
   function filterCards() {
     var filters = getActiveFilters();
     var cards = document.querySelectorAll('.paper-card');
+    var hasVisible = false;
     cards.forEach(function(card) {
       var visible = true;
-      // 检查每个筛选组
-      for (var group in filters) {
-        var values = filters[group];
-        if (values.length === 0) continue;
-        var dataAttr = card.getAttribute('data-' + group.toLowerCase().replace(/\s+/g, '-'));
-        if (dataAttr) {
-          var cardValues = dataAttr.split(',');
-          var match = values.some(function(v) { return cardValues.indexOf(v) !== -1; });
-          if (!match) visible = false;
-        }
+      // keywords filter
+      if (filters['keywords'] && filters['keywords'].length > 0) {
+        var kwAttr = card.getAttribute('data-keywords') || '';
+        var cardKWs = kwAttr.split(',').map(function(k) { return k.trim().toLowerCase(); });
+        var match = filters['keywords'].some(function(v) { return cardKWs.indexOf(v) !== -1; });
+        if (!match) visible = false;
+      }
+      // year filter
+      if (filters['year'] && filters['year'].length > 0) {
+        var cardYear = (card.getAttribute('data-year') || '').trim();
+        if (filters['year'].indexOf(cardYear) === -1) visible = false;
       }
       card.style.display = visible ? '' : 'none';
+      if (visible) hasVisible = true;
     });
+    var noResults = document.getElementById('no-results');
+    if (noResults) noResults.style.display = hasVisible ? 'none' : 'block';
   }
 })();
 
@@ -160,26 +164,19 @@
     if (statusEl) {
       statusEl.innerHTML = '<span style="color:var(--color-success)">已选择: ' + file.name + ' (' + (file.size/1024).toFixed(1) + ' KB)</span>';
     }
-    // 读取文件内容用于预览
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      var content = e.target.result;
-      // 可以将内容传给预览区（iframe srcdoc）或触发转换
-      updatePreview(content);
-    };
-    reader.readAsText(file);
+    // 触发上传转换（调用 upload.html 中的全局函数）
+    if (window.setUploadFile) {
+      window.setUploadFile(file);
+    }
   }
 
   function updatePreview(xmlContent) {
-    var previewFrame = document.querySelector('.preview-area iframe');
+    // 不再显示原始 XML；upload API 返回渲染后的 HTML。
+    // 如果还未上传，显示提示
     var placeholder = document.querySelector('.preview-placeholder');
-    if (previewFrame) {
-      // 简单预览：显示XML源码（实际应由后端解析后渲染）
-      previewFrame.srcdoc = '<pre style="padding:16px;font-size:12px;white-space:pre-wrap;word-break:break-all">' +
-        xmlContent.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
-        '</pre>';
-      if (placeholder) placeholder.style.display = 'none';
-      previewFrame.style.display = 'block';
+    var statusEl2 = document.getElementById('upload-status');
+    if (statusEl2 && placeholder && placeholder.style.display !== 'none') {
+      statusEl2.innerHTML = '<span style="color:var(--color-accent)">正在处理文件，请稍候...</span>';
     }
   }
 })();
@@ -217,4 +214,37 @@
 (function() {
   var noResults = document.getElementById('no-results');
   if (noResults) noResults.style.display = 'none';
+})();
+
+// ── 文章页全局函数 ──
+(function() {
+  // 下载文章 PDF
+  window.downloadArticlePDF = function(articleId, refStyle, twoColumn) {
+    var params = new URLSearchParams({
+      ref_style: refStyle || 'elsevier',
+      two_column: twoColumn ? 'true' : 'false'
+    });
+    var url = '/api/articles/' + articleId + '/pdf?' + params.toString();
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // 下载文章 HTML
+  window.downloadArticleHTML = function(articleId, refStyle, twoColumn) {
+    var params = new URLSearchParams({
+      ref_style: refStyle || 'elsevier',
+      two_column: twoColumn ? 'true' : 'false'
+    });
+    var url = '/api/articles/' + articleId + '/html?' + params.toString();
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 })();

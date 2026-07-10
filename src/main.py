@@ -53,8 +53,10 @@ def main():
                         help="自定义 CSS 样式表路径")
     parser.add_argument("--two-column", action="store_true",
                         help="启用双栏排版模式")
-    parser.add_argument("--render-formulas", action="store_true",
-                        help="预渲染MathML/LaTeX公式为SVG（需安装Node.js和mathjax-node-cli）")
+    parser.add_argument("--no-render-formulas", action="store_true",
+                        help="关闭公式预渲染（默认开启：MathML→SVG，需 Node.js+mathjax-node-cli）")
+    parser.add_argument("--ref-style", choices=["elsevier", "gbt7714"], default="elsevier",
+                        help="参考文献格式：elsevier（默认）或 gbt7714")
 
     args = parser.parse_args()
 
@@ -78,9 +80,9 @@ def main():
     )
 
     # ──────────────────────────────────────
-    # Step 1.5: （可选）预渲染公式
+    # Step 1.5: 预渲染公式（默认开启；--no-render-formulas 可关）
     # ──────────────────────────────────────
-    if args.render_formulas:
+    if not args.no_render_formulas:
         logger.info("🧮 正在预渲染公式 (MathML/LaTeX → SVG)...")
         try:
             from .renderer.formula_renderer import FormulaRenderer
@@ -95,7 +97,7 @@ def main():
     # ──────────────────────────────────────
     logger.info("🔧 正在渲染 HTML...")
     html_renderer = HTMLRenderer()
-    html_content = html_renderer.render(article)
+    html_content = html_renderer.render(article, ref_style=args.ref_style)
 
     # 双栏模式：在 <body> 上添加 class
     if args.two_column:

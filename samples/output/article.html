@@ -36,11 +36,11 @@
   --color-success:      #27ae60;
   --color-danger:       #c0392b;
 
-  /* 字体 */
-  --font-heading: "SimHei","黑体","Microsoft YaHei","Noto Sans SC",sans-serif;
-  --font-body:    "SimSun","宋体","Noto Serif SC","Georgia",serif;
-  --font-en:      "Georgia","Times New Roman",serif;
-  --font-mono:    "Consolas","Courier New",monospace;
+  /* 字体（中文优先黑体/宋体；macOS 回退 PingFang/Songti；西文 Times/Georgia）*/
+  --font-heading: "SimHei","黑体","PingFang SC","Microsoft YaHei","Source Han Sans SC","Noto Sans SC",sans-serif;
+  --font-body:    "SimSun","宋体","Songti SC","STSong","Source Han Serif SC","Noto Serif SC","Georgia",serif;
+  --font-en:      "Georgia","Times New Roman","Songti SC",serif;
+  --font-mono:    "Consolas","Menlo","Courier New",monospace;
 
   /* 字号 */
   --text-h1:   2rem;    /* 首页大标题 32px */
@@ -184,10 +184,13 @@ body{
   box-shadow:var(--shadow-sm);
   transition:all var(--transition);
   display:flex;flex-direction:column;gap:var(--space-sm);
+  border-top:3px solid var(--color-accent-light);
+  position:relative;
 }
 .paper-card:hover{
-  transform:translateY(-2px);
+  transform:translateY(-4px);
   box-shadow:var(--shadow-lg);
+  border-top-color:var(--color-highlight);
 }
 .paper-card .card-journal{
   font-family:var(--font-en);font-size:var(--text-2xs);
@@ -329,23 +332,41 @@ body{
 /* ═══════════════ Hero区域（首页） ═══════════════ */
 .hero{
   text-align:center;padding:var(--space-3xl) var(--space-xl);
-  background:linear-gradient(135deg, #f0f4f8 0%, #e8eef4 50%, #f5f2ed 100%);
+  background:linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 55%, var(--color-accent-light) 100%);
+  color:#fff;position:relative;overflow:hidden;
 }
+.hero::before{
+  content:'';position:absolute;top:-40%;right:-10%;width:55%;height:200%;
+  background:radial-gradient(circle, rgba(255,255,255,0.14) 0%, transparent 65%);
+  pointer-events:none;
+}
+.hero::after{
+  content:'';position:absolute;left:-10%;bottom:-50%;width:45%;height:150%;
+  background:radial-gradient(circle, rgba(52,152,219,0.20) 0%, transparent 65%);
+  pointer-events:none;
+}
+.hero>*{position:relative;z-index:1}
 .hero .hero-journal{
   font-family:var(--font-en);font-size:var(--text-xs);
-  color:var(--color-accent);font-style:italic;letter-spacing:2px;
+  color:rgba(255,255,255,0.82);font-style:italic;letter-spacing:3px;
   text-transform:uppercase;margin-bottom:var(--space-md);
 }
 .hero .hero-title{
   font-family:var(--font-heading);font-size:var(--text-h1);
-  font-weight:700;color:var(--color-primary);line-height:1.3;
-  margin-bottom:var(--space-md);max-width:600px;margin-left:auto;margin-right:auto;
+  font-weight:700;color:#fff;line-height:1.3;
+  margin-bottom:var(--space-md);max-width:640px;margin-left:auto;margin-right:auto;
+  text-shadow:0 2px 10px rgba(0,0,0,0.18);
 }
 .hero .hero-subtitle{
-  font-size:var(--text-sm);color:var(--color-text-sub);
-  max-width:500px;margin:0 auto var(--space-xl) auto;
+  font-size:var(--text-sm);color:rgba(255,255,255,0.88);
+  max-width:540px;margin:0 auto var(--space-xl) auto;
 }
 .hero .hero-actions{display:flex;gap:var(--space-md);justify-content:center;flex-wrap:wrap}
+/* hero 内按钮在深色背景上的反色 */
+.hero .btn-primary{background:#fff;color:var(--color-primary)}
+.hero .btn-primary:hover{background:#f0f7fc;transform:translateY(-1px);box-shadow:var(--shadow-md)}
+.hero .btn-outline{border-color:rgba(255,255,255,0.75);color:#fff;background:rgba(255,255,255,0.08)}
+.hero .btn-outline:hover{background:rgba(255,255,255,0.2);color:#fff}
 
 /* ═══════════════ 区块标题 .section-heading ═══════════════ */
 .section-heading{
@@ -474,6 +495,10 @@ body{
 .article-content .level-2>.section-title{
   font-size:1.125rem;margin:var(--space-lg) 0 var(--space-sm) 0;
 }
+.article-content .level-3>.section-title{font-size:1rem;font-weight:600;margin:var(--space-md) 0 var(--space-xs) 0}
+.article-content .level-4>.section-title,
+.article-content .level-5>.section-title,
+.article-content .level-6>.section-title{font-size:0.9375rem;font-weight:600;color:var(--color-text-sub);margin:var(--space-md) 0 var(--space-xs) 0}
 .article-content p{text-indent:2em;margin:0.6rem 0}
 .article-content .data-table{width:100%;border-collapse:collapse}
 .article-content .data-table thead{background:var(--color-primary);color:#fff}
@@ -498,6 +523,20 @@ body{
 }
 .article-content .figure figcaption{font-size:var(--text-xs);margin-top:var(--space-sm);color:var(--color-text-sub)}
 .article-content .formula-wrap{margin:var(--space-lg) 0;text-align:center;padding:var(--space-md)}
+/* 机构列表 */
+.article-content .affiliations{font-size:var(--text-2xs);color:var(--color-text-light);margin-top:var(--space-sm);line-height:1.7}
+.article-content .affiliations sup{color:var(--color-accent);font-weight:600}
+/* 交叉引用链接 */
+.article-content .xref{color:var(--color-accent-light);text-decoration:none;border-bottom:1px dotted var(--color-accent-light)}
+.article-content .xref:hover{color:var(--color-accent);border-bottom-style:solid}
+/* 英文摘要/关键词 */
+.article-content .abstract-en{background:linear-gradient(135deg,#f8fbfd,#eef4f8);border-left-color:var(--color-highlight);margin-top:calc(-1 * var(--space-md))}
+.article-content .abstract-en h2{color:var(--color-accent);letter-spacing:1px}
+.article-content .keywords-en{color:var(--color-text-light)}
+/* 行内公式 SVG */
+.article-content .inline-formula svg{height:1em;vertical-align:-0.2em}
+/* 图片自适应 */
+.article-content .figure img{max-width:100%;height:auto;border-radius:var(--radius-sm);margin:0 auto;display:block}
 .article-content .references{
   margin-top:var(--space-2xl);padding-top:var(--space-lg);
   border-top:2px solid var(--color-border);
@@ -626,7 +665,7 @@ body{
 
 <!-- ═══════════════ 面包屑 ═══════════════ -->
 <div class="container" style="padding-top:var(--space-md);padding-bottom:0">
-  <nav style="font-size:var(--text-xs);color:var(--color-text-light)">
+  <nav class="breadcrumb" style="font-size:var(--text-xs);color:var(--color-text-light)">
     <a href="index.html" style="color:var(--color-accent);text-decoration:none">首页</a>
     &ensp;/&ensp;
     <a href="browse.html" style="color:var(--color-accent);text-decoration:none">论文浏览</a>
@@ -667,7 +706,7 @@ body{
     </div>
   </aside>
 
-  <!-- 正文区 -->
+  <!-- 正文区（双栏 multicol 容器；图表/公式/摘要等跨栏元素须为本容器直接子元素） -->
   <main class="layout-main article-content">
 
     <header class="article-header">
@@ -678,14 +717,19 @@ body{
       <div class="authors">
         <span class="author">
           张三
-          <sup><a href="https://orcid.org/0000-0001-2345-6789" class="orcid" target="_blank">ⓘ ORCID</a></sup>
+<sup>1</sup>          <sup><a href="https://orcid.org/0000-0001-2345-6789" class="orcid" target="_blank">ⓘ ORCID</a></sup>
           <span class="author-email">zhangsan@university.edu.cn</span>
 <span>, </span>        </span>
         <span class="author">
           李四
-          <sup><a href="https://orcid.org/0000-0002-3456-7890" class="orcid" target="_blank">ⓘ ORCID</a></sup>
+<sup>2</sup>          <sup><a href="https://orcid.org/0000-0002-3456-7890" class="orcid" target="_blank">ⓘ ORCID</a></sup>
           <span class="author-email">lisi@university.edu.cn</span>
         </span>
+      </div>
+
+      <div class="affiliations">
+        <div class="affiliation"><sup>1</sup>智能文档处理实验室, 北京, 中国</div>
+        <div class="affiliation"><sup>2</sup>计算机科学与技术学院, 上海, 中国</div>
       </div>
 
       <div class="article-meta">
@@ -698,179 +742,157 @@ body{
       <h2>摘　要</h2>
       <p>学术文档结构识别是文献数字化中的关键任务。本文提出了一种融合LayoutLM与图神经网络的混合架构，用于自动识别学术论文中的章节标题、段落、公式、图表和参考文献等结构元素。在构建的中文学术论文数据集上，该方法在标题层级识别任务中达到96.3%的F1分数，在公式定位任务中达到94.7%的准确率。实验结果表明，图神经网络能有效捕捉文档元素间的空间关系，显著提升了版面分析的鲁棒性。</p>
     </section>
+    <section class="abstract abstract-en">
+      <h2>ABSTRACT</h2>
+      <p>Document structure recognition is a key task in literature digitization. This paper proposes a hybrid architecture combining LayoutLM and Graph Neural Networks (GNN) to automatically recognize structural elements in academic papers, including section titles, paragraphs, formulas, figures, tables, and references. On a constructed Chinese academic paper dataset, the method achieves an F1 score of 96.3% on heading hierarchy recognition and 94.7% accuracy on formula localization. Experimental results show that GNN can effectively capture spatial relationships among document elements, significantly improving the robustness of layout analysis.</p>
+    </section>
 
     <section class="keywords">
       <strong>关键词：</strong>文档结构识别；LayoutLM；图神经网络；学术文档；版面分析
     </section>
-
-    <!-- 正文 -->
-
-        <section class="section level-1" id="sec-1">
-      <h2 class="section-title">
-        1&ensp;引言
-      </h2>
-
-      <p>随着学术产出的快速增长，海量学术文献的数字化和结构化成为研究热点。传统的文档处理依赖人工标注和基于规则的方法，难以应对多样化的排版格式。近年来，预训练语言模型和视觉-语言联合模型的发展为文档智能理解开辟了新路径。</p>
-      <p>本文提出了一种融合LayoutLM与图神经网络（GNN）的混合架构，充分利用LayoutLM的跨模态表征能力和GNN的结构关系建模优势。主要贡献包括：（1）设计了一个端到端的学术文档结构识别流水线；（2）提出了基于GNN的文档元素关系建模方法；（3）构建了大规模中文学术论文标注数据集。</p>
-
-
-
-
+    <section class="keywords keywords-en">
+      <strong>Keywords:</strong>document structure recognition; LayoutLM; graph neural network; academic document; layout analysis
     </section>
 
-        <section class="section level-1" id="sec-2">
-      <h2 class="section-title">
-        2&ensp;相关工作
-      </h2>
 
 
 
+    <section class="section level-1" id="sec-1">
+  <h2 class="section-title">1&ensp;引言</h2>
+  <p>随着学术产出的快速增长，海量学术文献的数字化和结构化成为研究热点。传统的文档处理依赖人工标注和基于规则的方法，难以应对多样化的排版格式。近年来，预训练语言模型和视觉-语言联合模型的发展为文档智能理解开辟了新路径。</p>
+  <p>本文提出了一种融合LayoutLM与图神经网络（GNN）的混合架构，充分利用LayoutLM<a href="#r1" class="xref xref-bibr">[1]</a>的跨模态表征能力和GNN<a href="#r2" class="xref xref-bibr">[2], [3]</a>的结构关系建模优势。主要贡献包括：（1）设计了一个端到端的学术文档结构识别流水线；（2）提出了基于GNN的文档元素关系建模方法；（3）构建了大规模中文学术论文标注数据集。</p>
+</section>
+
+    <section class="section level-1" id="sec-2">
+  <h2 class="section-title">2&ensp;相关工作</h2>
+</section>
+<section class="section level-2" id="sec-2.1">
+  <h3 class="section-title">2.1&ensp;基于深度学习的文档分析</h3>
+  <p>近年来，文档分析领域经历了从规则驱动到数据驱动的范式转变。LayoutLM系列模型通过联合建模文本和布局信息，在多种文档理解任务上取得了优异表现。LayoutLMv3进一步引入了图像patch作为输入，实现了文本、布局和视觉三模态的统一建模。</p>
+</section>
+
+<section class="section level-2" id="sec-2.2">
+  <h3 class="section-title">2.2&ensp;图神经网络在文档分析中的应用</h3>
+  <p>图神经网络天然适合建模文档元素之间的空间和语义关系。现有方法通常将文档元素（文本框、段落、表格等）视为图中的节点，通过定义距离、对齐等关系来构造边，然后使用GCN或GAT进行消息传递。</p>
+</section>
 
 
-          <section class="section level-2" id="sec-2.1">
-      <h3 class="section-title">
-        2.1&ensp;基于深度学习的文档分析
-      </h3>
+    <section class="section level-1" id="sec-3">
+  <h2 class="section-title">3&ensp;方法</h2>
+</section>
+<section class="section level-2" id="sec-3.1">
+  <h3 class="section-title">3.1&ensp;整体架构</h3>
+  <p>本文提出的混合架构由三个核心模块组成：文档编码模块、结构关系建模模块和序列标注模块。文档编码模块使用LayoutLMv3提取每个token级别的多模态特征；结构关系建模模块将文档元素组织为图结构，通过多层GAT进行特征增强；序列标注模块使用条件随机场（CRF）进行全局最优标签序列的解码。系统整体架构如<a href="#f1" class="xref xref-fig">图1</a>所示。</p>
+</section>
+<figure class="figure" id="f1">
+<img src="arch.svg" alt="本文方法的整体架构示意图" loading="lazy">  <figcaption><span class="fig-label">图1</span>&ensp;本文方法的整体架构示意图</figcaption>
+</figure>
 
-      <p>近年来，文档分析领域经历了从规则驱动到数据驱动的范式转变。LayoutLM系列模型通过联合建模文本和布局信息，在多种文档理解任务上取得了优异表现。LayoutLMv3进一步引入了图像patch作为输入，实现了文本、布局和视觉三模态的统一建模。</p>
-
-
-
-
-    </section>
-
-          <section class="section level-2" id="sec-2.2">
-      <h3 class="section-title">
-        2.2&ensp;图神经网络在文档分析中的应用
-      </h3>
-
-      <p>图神经网络天然适合建模文档元素之间的空间和语义关系。现有方法通常将文档元素（文本框、段落、表格等）视为图中的节点，通过定义距离、对齐等关系来构造边，然后使用GCN或GAT进行消息传递。</p>
-
-
-
-
-    </section>
-
-    </section>
-
-        <section class="section level-1" id="sec-3">
-      <h2 class="section-title">
-        3&ensp;方法
-      </h2>
-
-
-
-
-
-          <section class="section level-2" id="sec-3.1">
-      <h3 class="section-title">
-        3.1&ensp;整体架构
-      </h3>
-
-      <p>本文提出的混合架构由三个核心模块组成：文档编码模块、结构关系建模模块和序列标注模块。文档编码模块使用LayoutLMv3提取每个token级别的多模态特征；结构关系建模模块将文档元素组织为图结构，通过多层GAT进行特征增强；序列标注模块使用条件随机场（CRF）进行全局最优标签序列的解码。</p>
-
-
-
-
-    </section>
-
-          <section class="section level-2" id="sec-3.2">
-      <h3 class="section-title">
-        3.2&ensp;图构建策略
-      </h3>
-
-      <p>我们将每个文档元素（段落、标题、公式、图表、表格）作为图节点。边的构建遵循三种策略：空间邻近（距离小于阈值δ的节点连边）、视觉对齐（水平或垂直对齐的节点连边）和阅读顺序（按阅读顺序相邻的节点连边）。</p>
-      <p>公式如下所示：</p>
-      <p>其中h_i表示节点i的特征表示，N(i)为节点i的邻居集合，α_ij为注意力系数，W为可学习的权重矩阵。</p>
-
-
-
-      <div class="formula-wrap" id="eq1">
-<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:xlink="http://www.w3.org/1999/xlink">
-            <mml:mrow>
-              <mml:msub><mml:mi>h</mml:mi><mml:mi>i</mml:mi></mml:msub>
-              <mml:mo>=</mml:mo>
-              <mml:mi>σ</mml:mi>
-              <mml:mrow>
-                <mml:mo>(</mml:mo>
-                <mml:mrow>
-                  <mml:munder><mml:mo>∑</mml:mo><mml:mi>j∈N(i)</mml:mi></mml:munder>
-                  <mml:mrow>
-                    <mml:msub><mml:mi>α</mml:mi><mml:mi>ij</mml:mi></mml:msub>
-                    <mml:mi>W</mml:mi>
-                    <mml:msub><mml:mi>h</mml:mi><mml:mi>j</mml:mi></mml:msub>
-                  </mml:mrow>
-                </mml:mrow>
-                <mml:mo>)</mml:mo>
-              </mml:mrow>
-            </mml:mrow>
-          </mml:math>
-        
-<p class="formula-label">（1）</p>      </div>
-
-    </section>
-
-    </section>
-
-        <section class="section level-1" id="sec-4">
-      <h2 class="section-title">
-        4&ensp;实验
-      </h2>
+<section class="section level-2" id="sec-3.2">
+  <h3 class="section-title">3.2&ensp;图构建策略</h3>
+  <p>我们将每个文档元素（段落、标题、公式、图表、表格）作为图节点。边的构建遵循三种策略：空间邻近（距离小于阈值δ的节点连边）、视觉对齐（水平或垂直对齐的节点连边）和阅读顺序（按阅读顺序相邻的节点连边）。</p>
+  <p>节点特征更新公式如<a href="#eq1" class="xref xref-disp-formula">(1)</a>所示：</p>
+  <p>其中<span class="inline-formula"><svg xmlns:xlink="http://www.w3.org/1999/xlink" width="2.139ex" height="2.509ex" style="vertical-align: -0.671ex;" viewBox="0 -791.3 920.8 1080.4" role="img" focusable="false" xmlns="http://www.w3.org/2000/svg" aria-labelledby="MathJax-SVG-1-Title">
+<title id="MathJax-SVG-1-Title">Equation</title>
+<defs aria-hidden="true">
+<path stroke-width="1" id="E1-MJMATHI-68" d="M137 683Q138 683 209 688T282 694Q294 694 294 685Q294 674 258 534Q220 386 220 383Q220 381 227 388Q288 442 357 442Q411 442 444 415T478 336Q478 285 440 178T402 50Q403 36 407 31T422 26Q450 26 474 56T513 138Q516 149 519 151T535 153Q555 153 555 145Q555 144 551 130Q535 71 500 33Q466 -10 419 -10H414Q367 -10 346 17T325 74Q325 90 361 192T398 345Q398 404 354 404H349Q266 404 205 306L198 293L164 158Q132 28 127 16Q114 -11 83 -11Q69 -11 59 -2T48 16Q48 30 121 320L195 616Q195 629 188 632T149 637H128Q122 643 122 645T124 664Q129 683 137 683Z"></path>
+<path stroke-width="1" id="E1-MJMATHI-69" d="M184 600Q184 624 203 642T247 661Q265 661 277 649T290 619Q290 596 270 577T226 557Q211 557 198 567T184 600ZM21 287Q21 295 30 318T54 369T98 420T158 442Q197 442 223 419T250 357Q250 340 236 301T196 196T154 83Q149 61 149 51Q149 26 166 26Q175 26 185 29T208 43T235 78T260 137Q263 149 265 151T282 153Q302 153 302 143Q302 135 293 112T268 61T223 11T161 -11Q129 -11 102 10T74 74Q74 91 79 106T122 220Q160 321 166 341T173 380Q173 404 156 404H154Q124 404 99 371T61 287Q60 286 59 284T58 281T56 279T53 278T49 278T41 278H27Q21 284 21 287Z"></path>
+</defs>
+<g stroke="currentColor" fill="currentColor" stroke-width="0" transform="matrix(1 0 0 -1 0 0)" aria-hidden="true">
+ <use xlink:href="#E1-MJMATHI-68" x="0" y="0"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMATHI-69" x="815" y="-213"></use>
+</g>
+</svg></span>表示节点i的特征表示，N(i)为节点i的邻居集合，α_ij为注意力系数，W为可学习的权重矩阵。</p>
+</section>
+<div class="formula-wrap" id="eq1">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="24.736ex" height="4.843ex" style="vertical-align: -1.838ex;" viewBox="0 -1293.7 10650.2 2085" role="img" focusable="false" xmlns="http://www.w3.org/2000/svg" aria-labelledby="MathJax-SVG-1-Title">
+<title id="MathJax-SVG-1-Title">Equation</title>
+<defs aria-hidden="true">
+<path stroke-width="1" id="E1-MJMATHI-68" d="M137 683Q138 683 209 688T282 694Q294 694 294 685Q294 674 258 534Q220 386 220 383Q220 381 227 388Q288 442 357 442Q411 442 444 415T478 336Q478 285 440 178T402 50Q403 36 407 31T422 26Q450 26 474 56T513 138Q516 149 519 151T535 153Q555 153 555 145Q555 144 551 130Q535 71 500 33Q466 -10 419 -10H414Q367 -10 346 17T325 74Q325 90 361 192T398 345Q398 404 354 404H349Q266 404 205 306L198 293L164 158Q132 28 127 16Q114 -11 83 -11Q69 -11 59 -2T48 16Q48 30 121 320L195 616Q195 629 188 632T149 637H128Q122 643 122 645T124 664Q129 683 137 683Z"></path>
+<path stroke-width="1" id="E1-MJMATHI-69" d="M184 600Q184 624 203 642T247 661Q265 661 277 649T290 619Q290 596 270 577T226 557Q211 557 198 567T184 600ZM21 287Q21 295 30 318T54 369T98 420T158 442Q197 442 223 419T250 357Q250 340 236 301T196 196T154 83Q149 61 149 51Q149 26 166 26Q175 26 185 29T208 43T235 78T260 137Q263 149 265 151T282 153Q302 153 302 143Q302 135 293 112T268 61T223 11T161 -11Q129 -11 102 10T74 74Q74 91 79 106T122 220Q160 321 166 341T173 380Q173 404 156 404H154Q124 404 99 371T61 287Q60 286 59 284T58 281T56 279T53 278T49 278T41 278H27Q21 284 21 287Z"></path>
+<path stroke-width="1" id="E1-MJMAIN-3D" d="M56 347Q56 360 70 367H707Q722 359 722 347Q722 336 708 328L390 327H72Q56 332 56 347ZM56 153Q56 168 72 173H708Q722 163 722 153Q722 140 707 133H70Q56 140 56 153Z"></path>
+<path stroke-width="1" id="E1-MJMATHI-3C3" d="M184 -11Q116 -11 74 34T31 147Q31 247 104 333T274 430Q275 431 414 431H552Q553 430 555 429T559 427T562 425T565 422T567 420T569 416T570 412T571 407T572 401Q572 357 507 357Q500 357 490 357T476 358H416L421 348Q439 310 439 263Q439 153 359 71T184 -11ZM361 278Q361 358 276 358Q152 358 115 184Q114 180 114 178Q106 141 106 117Q106 67 131 47T188 26Q242 26 287 73Q316 103 334 153T356 233T361 278Z"></path>
+<path stroke-width="1" id="E1-MJMAIN-28" d="M94 250Q94 319 104 381T127 488T164 576T202 643T244 695T277 729T302 750H315H319Q333 750 333 741Q333 738 316 720T275 667T226 581T184 443T167 250T184 58T225 -81T274 -167T316 -220T333 -241Q333 -250 318 -250H315H302L274 -226Q180 -141 137 -14T94 250Z"></path>
+<path stroke-width="1" id="E1-MJSZ1-2211" d="M61 748Q64 750 489 750H913L954 640Q965 609 976 579T993 533T999 516H979L959 517Q936 579 886 621T777 682Q724 700 655 705T436 710H319Q183 710 183 709Q186 706 348 484T511 259Q517 250 513 244L490 216Q466 188 420 134T330 27L149 -187Q149 -188 362 -188Q388 -188 436 -188T506 -189Q679 -189 778 -162T936 -43Q946 -27 959 6H999L913 -249L489 -250Q65 -250 62 -248Q56 -246 56 -239Q56 -234 118 -161Q186 -81 245 -11L428 206Q428 207 242 462L57 717L56 728Q56 744 61 748Z"></path>
+<path stroke-width="1" id="E1-MJMAIN-6A" d="M98 609Q98 637 116 653T160 669Q183 667 200 652T217 609Q217 579 200 564T158 549Q133 549 116 564T98 609ZM28 -163Q58 -168 64 -168Q124 -168 135 -77Q137 -65 137 141T136 353Q132 371 120 377T72 385H52V408Q52 431 54 431L58 432Q62 432 70 432T87 433T108 434T133 436Q151 437 171 438T202 441T214 442H218V184Q217 -36 217 -59T211 -98Q195 -145 153 -175T58 -205Q9 -205 -23 -179T-55 -117Q-55 -94 -40 -79T-2 -64T36 -79T52 -118Q52 -143 28 -163Z"></path>
+<path stroke-width="1" id="E1-MJMAIN-2208" d="M84 250Q84 372 166 450T360 539Q361 539 377 539T419 540T469 540H568Q583 532 583 520Q583 511 570 501L466 500Q355 499 329 494Q280 482 242 458T183 409T147 354T129 306T124 272V270H568Q583 262 583 250T568 230H124V228Q124 207 134 177T167 112T231 48T328 7Q355 1 466 0H570Q583 -10 583 -20Q583 -32 568 -40H471Q464 -40 446 -40T417 -41Q262 -41 172 45Q84 127 84 250Z"></path>
+<path stroke-width="1" id="E1-MJMAIN-4E" d="M42 46Q74 48 94 56T118 69T128 86V634H124Q114 637 52 637H25V683H232L235 680Q237 679 322 554T493 303L578 178V598Q572 608 568 613T544 627T492 637H475V683H483Q498 680 600 680Q706 680 715 683H724V637H707Q634 633 622 598L621 302V6L614 0H600Q585 0 582 3T481 150T282 443T171 605V345L172 86Q183 50 257 46H274V0H265Q250 3 150 3Q48 3 33 0H25V46H42Z"></path>
+<path stroke-width="1" id="E1-MJMAIN-69" d="M69 609Q69 637 87 653T131 669Q154 667 171 652T188 609Q188 579 171 564T129 549Q104 549 87 564T69 609ZM247 0Q232 3 143 3Q132 3 106 3T56 1L34 0H26V46H42Q70 46 91 49Q100 53 102 60T104 102V205V293Q104 345 102 359T88 378Q74 385 41 385H30V408Q30 431 32 431L42 432Q52 433 70 434T106 436Q123 437 142 438T171 441T182 442H185V62Q190 52 197 50T232 46H255V0H247Z"></path>
+<path stroke-width="1" id="E1-MJMAIN-29" d="M60 749L64 750Q69 750 74 750H86L114 726Q208 641 251 514T294 250Q294 182 284 119T261 12T224 -76T186 -143T145 -194T113 -227T90 -246Q87 -249 86 -250H74Q66 -250 63 -250T58 -247T55 -238Q56 -237 66 -225Q221 -64 221 250T66 725Q56 737 55 738Q55 746 60 749Z"></path>
+<path stroke-width="1" id="E1-MJMATHI-3B1" d="M34 156Q34 270 120 356T309 442Q379 442 421 402T478 304Q484 275 485 237V208Q534 282 560 374Q564 388 566 390T582 393Q603 393 603 385Q603 376 594 346T558 261T497 161L486 147L487 123Q489 67 495 47T514 26Q528 28 540 37T557 60Q559 67 562 68T577 70Q597 70 597 62Q597 56 591 43Q579 19 556 5T512 -10H505Q438 -10 414 62L411 69L400 61Q390 53 370 41T325 18T267 -2T203 -11Q124 -11 79 39T34 156ZM208 26Q257 26 306 47T379 90L403 112Q401 255 396 290Q382 405 304 405Q235 405 183 332Q156 292 139 224T121 120Q121 71 146 49T208 26Z"></path>
+<path stroke-width="1" id="E1-MJMATHI-57" d="M436 683Q450 683 486 682T553 680Q604 680 638 681T677 682Q695 682 695 674Q695 670 692 659Q687 641 683 639T661 637Q636 636 621 632T600 624T597 615Q597 603 613 377T629 138L631 141Q633 144 637 151T649 170T666 200T690 241T720 295T759 362Q863 546 877 572T892 604Q892 619 873 628T831 637Q817 637 817 647Q817 650 819 660Q823 676 825 679T839 682Q842 682 856 682T895 682T949 681Q1015 681 1034 683Q1048 683 1048 672Q1048 666 1045 655T1038 640T1028 637Q1006 637 988 631T958 617T939 600T927 584L923 578L754 282Q586 -14 585 -15Q579 -22 561 -22Q546 -22 542 -17Q539 -14 523 229T506 480L494 462Q472 425 366 239Q222 -13 220 -15T215 -19Q210 -22 197 -22Q178 -22 176 -15Q176 -12 154 304T131 622Q129 631 121 633T82 637H58Q51 644 51 648Q52 671 64 683H76Q118 680 176 680Q301 680 313 683H323Q329 677 329 674T327 656Q322 641 318 637H297Q236 634 232 620Q262 160 266 136L501 550L499 587Q496 629 489 632Q483 636 447 637Q428 637 422 639T416 648Q416 650 418 660Q419 664 420 669T421 676T424 680T428 682T436 683Z"></path>
+<path stroke-width="1" id="E1-MJMATHI-6A" d="M297 596Q297 627 318 644T361 661Q378 661 389 651T403 623Q403 595 384 576T340 557Q322 557 310 567T297 596ZM288 376Q288 405 262 405Q240 405 220 393T185 362T161 325T144 293L137 279Q135 278 121 278H107Q101 284 101 286T105 299Q126 348 164 391T252 441Q253 441 260 441T272 442Q296 441 316 432Q341 418 354 401T367 348V332L318 133Q267 -67 264 -75Q246 -125 194 -164T75 -204Q25 -204 7 -183T-12 -137Q-12 -110 7 -91T53 -71Q70 -71 82 -81T95 -112Q95 -148 63 -167Q69 -168 77 -168Q111 -168 139 -140T182 -74L193 -32Q204 11 219 72T251 197T278 308T289 365Q289 372 288 376Z"></path>
+<path stroke-width="1" id="E1-MJSZ2-28" d="M180 96T180 250T205 541T266 770T353 944T444 1069T527 1150H555Q561 1144 561 1141Q561 1137 545 1120T504 1072T447 995T386 878T330 721T288 513T272 251Q272 133 280 56Q293 -87 326 -209T399 -405T475 -531T536 -609T561 -640Q561 -643 555 -649H527Q483 -612 443 -568T353 -443T266 -270T205 -41Z"></path>
+<path stroke-width="1" id="E1-MJSZ2-29" d="M35 1138Q35 1150 51 1150H56H69Q113 1113 153 1069T243 944T330 771T391 541T416 250T391 -40T330 -270T243 -443T152 -568T69 -649H56Q43 -649 39 -647T35 -637Q65 -607 110 -548Q283 -316 316 56Q324 133 324 251Q324 368 316 445Q278 877 48 1123Q36 1137 35 1138Z"></path>
+</defs>
+<g stroke="currentColor" fill="currentColor" stroke-width="0" transform="matrix(1 0 0 -1 0 0)" aria-hidden="true">
+ <use xlink:href="#E1-MJMATHI-68" x="0" y="0"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMATHI-69" x="815" y="-213"></use>
+ <use xlink:href="#E1-MJMAIN-3D" x="1198" y="0"></use>
+ <use xlink:href="#E1-MJMATHI-3C3" x="2254" y="0"></use>
+<g transform="translate(2994,0)">
+ <use xlink:href="#E1-MJSZ2-28"></use>
+<g transform="translate(597,0)">
+ <use xlink:href="#E1-MJSZ1-2211" x="0" y="0"></use>
+<g transform="translate(1056,-287)">
+ <use transform="scale(0.707)" xlink:href="#E1-MJMAIN-6A"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMAIN-2208" x="306" y="0"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMAIN-4E" x="974" y="0"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMAIN-28" x="1724" y="0"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMAIN-69" x="2114" y="0"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMAIN-29" x="2392" y="0"></use>
+</g>
+<g transform="translate(3290,0)">
+ <use xlink:href="#E1-MJMATHI-3B1" x="0" y="0"></use>
+<g transform="translate(640,-150)">
+ <use transform="scale(0.707)" xlink:href="#E1-MJMAIN-69"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMAIN-6A" x="278" y="0"></use>
+</g>
+ <use xlink:href="#E1-MJMATHI-57" x="1154" y="0"></use>
+<g transform="translate(2202,0)">
+ <use xlink:href="#E1-MJMATHI-68" x="0" y="0"></use>
+ <use transform="scale(0.707)" xlink:href="#E1-MJMATHI-6A" x="815" y="-213"></use>
+</g>
+</g>
+</g>
+ <use xlink:href="#E1-MJSZ2-29" x="7058" y="-1"></use>
+</g>
+</g>
+</svg>  <p class="formula-label">(1)</p>
+</div>
 
 
+    <section class="section level-1" id="sec-4">
+  <h2 class="section-title">4&ensp;实验</h2>
+</section>
+<section class="section level-2" id="sec-4.1">
+  <h3 class="section-title">4.1&ensp;数据集</h3>
+  <p>我们从知网（CNKI）和万方数据库中收集了5,000篇中文学术论文，涵盖计算机科学、电子工程、数学、物理学和生物学五个学科。每篇论文由三位标注者独立标注，取两人以上一致的标注作为最终结果。数据集统计信息见<a href="#t1" class="xref xref-table">表1</a>。</p>
+</section>
+<div class="table-wrap" id="t1">
+  <p class="table-caption"><span class="tbl-label">表1</span>&ensp;数据集统计信息</p>
+  <table class="data-table">
+    <thead><tr><th>学科</th><th>论文数</th><th>平均页数</th><th>平均章节数</th></tr></thead>
+    <tbody>
+      <tr><td>计算机科学</td><td>1,200</td><td>8.5</td><td>5.2</td></tr>
+      <tr><td>电子工程</td><td>980</td><td>7.8</td><td>4.8</td></tr>
+      <tr><td>数学</td><td>1,050</td><td>10.2</td><td>6.1</td></tr>
+      <tr><td>物理学</td><td>890</td><td>9.1</td><td>5.5</td></tr>
+      <tr><td>生物学</td><td>880</td><td>9.8</td><td>5.9</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<section class="section level-2" id="sec-4.2">
+  <h3 class="section-title">4.2&ensp;实验结果</h3>
+  <p>我们在测试集上评估了所提方法在各项任务上的性能。实验结果表明，融合GNN后，标题层级识别的F1分数从93.1%提升至96.3%，公式定位的准确率从89.2%提升至94.7%。</p>
+</section>
 
 
-
-          <section class="section level-2" id="sec-4.1">
-      <h3 class="section-title">
-        4.1&ensp;数据集
-      </h3>
-
-      <p>我们从知网（CNKI）和万方数据库中收集了5,000篇中文学术论文，涵盖计算机科学、电子工程、数学、物理学和生物学五个学科。每篇论文由三位标注者独立标注，取两人以上一致的标注作为最终结果。</p>
-
-
-      <div class="table-wrap" id="t1">
-        <p class="table-caption"><span class="tbl-label">表1</span>&ensp;</p>
-        <table class="data-table">
-          <thead><tr><th>学科</th><th>论文数</th><th>平均页数</th><th>平均章节数</th></tr></thead>
-          <tbody>
-            <tr><td>计算机科学</td><td>1,200</td><td>8.5</td><td>5.2</td></tr>
-            <tr><td>电子工程</td><td>980</td><td>7.8</td><td>4.8</td></tr>
-            <tr><td>数学</td><td>1,050</td><td>10.2</td><td>6.1</td></tr>
-            <tr><td>物理学</td><td>890</td><td>9.1</td><td>5.5</td></tr>
-            <tr><td>生物学</td><td>880</td><td>9.8</td><td>5.9</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-
-    </section>
-
-          <section class="section level-2" id="sec-4.2">
-      <h3 class="section-title">
-        4.2&ensp;实验结果
-      </h3>
-
-      <p>我们在测试集上评估了所提方法在各项任务上的性能。实验结果表明，融合GNN后，标题层级识别的F1分数从93.1%提升至96.3%，公式定位的准确率从89.2%提升至94.7%。</p>
-
-
-
-
-    </section>
-
-    </section>
-
-        <section class="section level-1" id="sec-5">
-      <h2 class="section-title">
-        5&ensp;结论
-      </h2>
-
-      <p>本文提出了一种融合LayoutLM与图神经网络的学术文档结构识别方法。实验表明，GNN能有效建模文档元素间的空间和语义关系，显著提升结构识别的准确性。未来的工作将探索将本方法扩展到更多语言和文档类型。</p>
-
-
-
-
-    </section>
+    <section class="section level-1" id="sec-5">
+  <h2 class="section-title">5&ensp;结论</h2>
+  <p>本文提出了一种融合LayoutLM与图神经网络的学术文档结构识别方法。实验表明，GNN能有效建模文档元素间的空间和语义关系，显著提升结构识别的准确性。未来的工作将探索将本方法扩展到更多语言和文档类型。</p>
+</section>
 
 
     <!-- 参考文献 -->
@@ -878,11 +900,11 @@ body{
       <h2>参考文献</h2>
       <ol>
         <li id="r1" class="reference-item">
-"LayoutLM: Pre-training of Text and Layout for Document Image Understanding."<em>Proceedings of KDD</em>, 1: 1192(2020).<a href="https://doi.org/10.1145/3394486.3403172" class="ref-doi" target="_blank">doi:10.1145/3394486.3403172</a>        </li>
+Y Xu, M Li. LayoutLM: Pre-training of Text and Layout for Document Image Understanding. <em>Proceedings of KDD</em>, vol. 1, pp. 1192-1200, (2020). <a href="https://doi.org/10.1145/3394486.3403172" class="ref-doi" target="_blank">doi:10.1145/3394486.3403172</a>        </li>
         <li id="r2" class="reference-item">
-"LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking."<em>Proceedings of ACM Multimedia</em>, 1: 4083(2022).<a href="https://doi.org/10.1145/3503161.3548397" class="ref-doi" target="_blank">doi:10.1145/3503161.3548397</a>        </li>
+Y Huang, T Lv. LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking. <em>Proceedings of ACM Multimedia</em>, vol. 1, pp. 4083-4091, (2022). <a href="https://doi.org/10.1145/3503161.3548397" class="ref-doi" target="_blank">doi:10.1145/3503161.3548397</a>        </li>
         <li id="r3" class="reference-item">
-"Graph Attention Networks."<em>ICLR</em>(2018).        </li>
+P Veličković. Graph Attention Networks. <em>ICLR</em>, (2018).        </li>
       </ol>
     </section>
 
