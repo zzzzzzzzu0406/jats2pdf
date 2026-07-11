@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}浏览论文 | {{ journal_name or "学术期刊优化平台" }}{% endblock %}
+
+{% block content %}
+<section class="container" style="padding-top:var(--space-2xl);padding-bottom:var(--space-3xl)">
+  <div style="display:flex;justify-content:space-between;align-items:end;gap:var(--space-lg);flex-wrap:wrap">
+    <div>
+      <div class="card-journal">{{ journal_name or "Academic Journal Platform" }}</div>
+      <h1 class="section-heading" style="margin-bottom:0">浏览论文</h1>
+    </div>
+    <div class="search-bar" style="min-width:min(100%,360px)">
+      <input type="search" placeholder="搜索标题、作者、摘要或关键词" aria-label="搜索论文">
+    </div>
+  </div>
+
+  <div class="card-grid" style="margin-top:var(--space-xl)">
+    {% for article in articles %}
+    <article class="paper-card"
+             data-keywords="{{ article.keywords | join(',') }}"
+             data-year="{{ article.publication_year or '' }}">
+      <div class="card-journal">{{ article.journal or "学术论文" }}</div>
+      <h2 class="card-title">
+        {% if article.id is defined and article.id %}
+        <a href="/article/{{ article.id }}">{{ article.title }}</a>
+        {% else %}
+        {{ article.title }}
+        {% endif %}
+      </h2>
+      <div class="card-authors">
+        {% for author in article.authors[:5] %}
+        {{ author.surname }}{{ author.given_name }}{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        {% if article.authors | length > 5 %}等{% endif %}
+      </div>
+      {% if article.abstract %}<p class="card-abstract">{{ article.abstract }}</p>{% endif %}
+      <div class="card-tags">
+        {% for keyword in article.keywords[:5] %}<span class="card-tag">{{ keyword }}</span>{% endfor %}
+      </div>
+      <div class="card-meta">
+        <span>{{ article.publication_year or '' }}</span>
+        <span>{{ article.doi or '' }}</span>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  <p id="no-results" style="display:none;text-align:center;padding:var(--space-2xl);color:var(--color-text-light)">
+    没有找到匹配的论文。
+  </p>
+</section>
+{% endblock %}

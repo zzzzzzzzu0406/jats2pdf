@@ -61,7 +61,7 @@ body {
 .level-4 > .section-title,
 .level-5 > .section-title,
 .level-6 > .section-title { font-size: 1em; }
-.section p { text-indent: 2em; margin-bottom: 8px; }
+.article-paragraph { text-indent: 2em; margin-bottom: 8px; }
 
 /* ── 图表 ── */
 .figure { text-align: center; margin: 20px 0; padding: 12px; border: 1px solid var(--color-border); border-radius: 4px; }
@@ -69,10 +69,19 @@ body {
 .fig-label, .tbl-label { font-weight: 700; }
 .figure figcaption, .table-caption { font-size: 0.85em; color: var(--color-text-sub); margin-top: 6px; }
 
-.table-wrap { margin: 20px 0; }
-.data-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 0.85em; }
-.data-table th, .data-table td { border: 1px solid var(--color-border); padding: 6px 10px; text-align: left; }
-.data-table thead { background: #f5f5f5; }
+.table-wrap { margin: 20px 0; max-width: 100%; }
+.table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--color-border); border-radius: 4px; }
+.table-scroll:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.data-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 0.85em; }
+.data-table th, .data-table td { border: 1px solid var(--color-border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.data-table th { vertical-align: middle; }
+.data-table thead { background: #f1f4f6; }
+.data-table tbody th { background: #f7f8f9; }
+.data-table .cell-align-center { text-align: center; }
+.data-table .cell-align-right, .data-table .cell-align-char { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table .cell-align-left { text-align: left; }
+.table-notes { margin-top: 8px; color: var(--color-text-sub); font-size: 0.78em; line-height: 1.55; }
+.table-notes p { margin: 3px 0; text-indent: 0; }
 
 /* ── 公式 ── */
 .formula-wrap { text-align: center; margin: 20px 0; padding: 8px; }
@@ -103,6 +112,8 @@ body.two-column .references { column-span: all; }
 /* ── 打印 ── */
 @media print {
   body { padding: 0; font-size: 10pt; }
+  .table-scroll { overflow: visible; border: 0; }
+  .data-table { min-width: 0; }
 }
 </style>
 </head>
@@ -173,45 +184,76 @@ body.two-column .references { column-span: all; }
     {% if ref.authors %}{{ ref.authors }}. {% endif %}{% if ref.title %}{{ ref.title }}[{{ gtype }}]. {% endif %}{% if ref.journal %}{{ ref.journal }}, {% endif %}{% if ref.year %}{{ ref.year }}{% endif %}{% if ref.volume %}, {{ ref.volume }}{% endif %}{% if ref.issue %}({{ ref.issue }}){% endif %}{% if ref.pages %}: {{ ref.pages }}.{% endif %}{% if ref.doi %} DOI: {{ ref.doi }}.{% endif %}
   {%- endmacro %}
 
-  {# ── 章节递归 ── #}
-  {% macro render_section(section, number) %}
-  <section class="section level-{{ section.level }}" id="sec-{{ number }}">
-    <h{{ [section.level + 1, 6] | min }} class="section-title">{{ number }}&ensp;{{ section.title }}</h{{ [section.level + 1, 6] | min }}>
-    {% for para in section.paragraphs %}
-    <p>{% for run in para.runs %}{% if run.kind == 'xref' %}<a href="#{{ article.xref_anchor(run.rid) }}" class="xref xref-{{ run.ref_type }}">{{ article.xref_label(run.rid, run.text) }}</a>{% elif run.kind == 'formula' %}{{ inline_fm(run.formula) }}{% else %}{{ run.text }}{% endif %}{% endfor %}</p>
-    {% endfor %}
-  </section>
-  {% for fig in section.figures %}
+  {# ── 有序正文块 ── #}
+  {% macro render_para(para) %}<p class="article-paragraph">{% for run in para.runs %}{% if run.kind == 'xref' %}<a href="#{{ article.xref_anchor(run.rid) }}" class="xref xref-{{ run.ref_type }}">{{ article.xref_label(run.rid, run.text) }}</a>{% elif run.kind == 'formula' %}{{ inline_fm(run.formula) }}{% else %}{{ run.text }}{% endif %}{% endfor %}</p>{% endmacro %}
+  {% macro render_fig(fig) %}
   <figure class="figure" id="{{ fig.id or 'fig-' ~ fig.number }}">
-    {% if fig.graphic_href %}<img src="{{ fig.graphic_href | resolve_image }}" alt="{{ fig.caption }}" loading="lazy">{% endif %}
+    {% set image_src = fig.graphic_href | resolve_image %}
+    {% if image_src %}<img src="{{ image_src }}" alt="{{ fig.caption }}" loading="lazy">{% endif %}
     <figcaption><span class="fig-label">{{ fig.label }}</span>&ensp;{{ fig.caption }}</figcaption>
   </figure>
-  {% endfor %}
-  {% for tbl in section.tables %}
+  {% endmacro %}
+  {% macro render_tbl(tbl) %}
   <div class="table-wrap" id="{{ tbl.id or 'tab-' ~ tbl.number }}">
     <p class="table-caption"><span class="tbl-label">{{ tbl.label }}</span>&ensp;{{ tbl.caption }}</p>
-    <table class="data-table">
-      {% if tbl.headers %}
-      <thead><tr>{% for h in tbl.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
-      {% endif %}
-      <tbody>{% for row in tbl.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
-    </table>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="{{ tbl.label or tbl.caption or '数据表格' }}">
+      <table class="data-table">
+        {% if tbl.header_rows is defined and tbl.body_rows is defined %}
+          {% if tbl.header_rows %}
+          <thead>{% for row in tbl.header_rows %}<tr>{% for cell in row %}<th scope="col"{% if cell.colspan > 1 %} colspan="{{ cell.colspan }}"{% endif %}{% if cell.rowspan > 1 %} rowspan="{{ cell.rowspan }}"{% endif %}{% if cell.align %} class="cell-align-{{ cell.align }}"{% endif %}>{{ cell.text }}</th>{% endfor %}</tr>{% endfor %}</thead>
+          {% endif %}
+          <tbody>{% for row in tbl.body_rows %}<tr>{% for cell in row %}{% if cell.is_header %}<th scope="row"{% if cell.colspan > 1 %} colspan="{{ cell.colspan }}"{% endif %}{% if cell.rowspan > 1 %} rowspan="{{ cell.rowspan }}"{% endif %}{% if cell.align %} class="cell-align-{{ cell.align }}"{% endif %}>{{ cell.text }}</th>{% else %}<td{% if cell.colspan > 1 %} colspan="{{ cell.colspan }}"{% endif %}{% if cell.rowspan > 1 %} rowspan="{{ cell.rowspan }}"{% endif %}{% if cell.align %} class="cell-align-{{ cell.align }}"{% endif %}>{{ cell.text }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
+        {% else %}
+          {% if tbl.headers %}<thead><tr>{% for h in tbl.headers %}<th scope="col">{{ h }}</th>{% endfor %}</tr></thead>{% endif %}
+          <tbody>{% for row in tbl.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        {% endif %}
+      </table>
+    </div>
+    {% if tbl.footnotes is defined and tbl.footnotes %}<div class="table-notes" role="note">{% for note in tbl.footnotes %}<p>{{ note }}</p>{% endfor %}</div>{% endif %}
   </div>
-  {% endfor %}
-  {% for fm in section.formulas if not fm.is_inline %}
+  {% endmacro %}
+  {% macro render_fm(fm) %}
   <div class="formula-wrap" id="{{ fm.id or 'eq-' ~ fm.number }}">
     {% if fm.mathml %}{% if fm.is_svg %}{{ fm.mathml | safe }}{% else %}<span class="formula-mathml">{{ fm.mathml | safe }}</span>{% endif %}{% elif fm.latex %}<div class="formula">$${{ fm.latex }}$$</div>{% endif %}
     <p class="formula-label">{{ fm.label }}</p>
   </div>
-  {% endfor %}
-  {% for sub in section.subsections %}
-  {{ render_section(sub, number ~ "." ~ loop.index) }}
-  {% endfor %}
+  {% endmacro %}
+  {% macro render_section(section, number) %}
+  <section class="section level-{{ section.level }}" id="sec-{{ number }}">
+    <h{{ [section.level + 1, 6] | min }} class="section-title">{{ number }}&ensp;{{ section.title }}</h{{ [section.level + 1, 6] | min }}>
+  </section>
+  {% if section.blocks is defined and section.blocks %}
+    {% set child_no = namespace(value=0) %}
+    {% for block in section.blocks %}
+      {% if block.kind == 'paragraph' %}{{ render_para(block.value) }}
+      {% elif block.kind == 'figure' %}{{ render_fig(block.value) }}
+      {% elif block.kind == 'table' %}{{ render_tbl(block.value) }}
+      {% elif block.kind == 'formula' %}{{ render_fm(block.value) }}
+      {% elif block.kind == 'section' %}{% set child_no.value = child_no.value + 1 %}{{ render_section(block.value, number ~ "." ~ child_no.value) }}
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    {% for para in section.paragraphs %}{{ render_para(para) }}{% endfor %}
+    {% for fig in section.figures %}{{ render_fig(fig) }}{% endfor %}
+    {% for tbl in section.tables %}{{ render_tbl(tbl) }}{% endfor %}
+    {% for fm in section.formulas if not fm.is_inline %}{{ render_fm(fm) }}{% endfor %}
+    {% for sub in section.subsections %}{{ render_section(sub, number ~ "." ~ loop.index) }}{% endfor %}
+  {% endif %}
   {% endmacro %}
 
-  {% for section in article.sections %}
-  {{ render_section(section, loop.index | string) }}
-  {% endfor %}
+  {% if article.blocks is defined and article.blocks %}
+    {% set root_no = namespace(value=0) %}
+    {% for block in article.blocks %}
+      {% if block.kind == 'section' %}{% set root_no.value = root_no.value + 1 %}{{ render_section(block.value, root_no.value | string) }}
+      {% elif block.kind == 'paragraph' %}{{ render_para(block.value) }}
+      {% elif block.kind == 'figure' %}{{ render_fig(block.value) }}
+      {% elif block.kind == 'table' %}{{ render_tbl(block.value) }}
+      {% elif block.kind == 'formula' %}{{ render_fm(block.value) }}
+      {% endif %}
+    {% endfor %}
+  {% else %}
+    {% for section in article.sections %}{{ render_section(section, loop.index | string) }}{% endfor %}
+  {% endif %}
 
   <!-- 参考文献 -->
   {% if has_references %}

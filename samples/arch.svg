@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="260" viewBox="0 0 760 260" font-family="SimHei, 'PingFang SC', sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2e86c1"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #1a5276; stroke-width: 2; rx: 10; }
+      .ttl { fill: #1a5276; font-size: 17px; font-weight: 700; text-anchor: middle; }
+      .sub { fill: #555; font-size: 13px; text-anchor: middle; }
+      .arrow { stroke: #2e86c1; stroke-width: 2.5; fill: none; }
+      .cap { fill: #888; font-size: 12px; text-anchor: middle; }
+    </style>
+  </defs>
+  <rect x="0" y="0" width="760" height="260" fill="#fcfcfc"/>
+  <rect class="box" x="30" y="70" width="200" height="120"/>
+  <text class="ttl" x="130" y="115">文档编码模块</text>
+  <text class="sub" x="130" y="145">LayoutLMv3</text>
+  <text class="sub" x="130" y="168">文本+布局+图像patch</text>
+  <path class="arrow" d="M235,130 L290,130" marker-end="url(#arrow)"/>
+  <rect class="box" x="295" y="70" width="200" height="120"/>
+  <text class="ttl" x="395" y="115">结构关系建模</text>
+  <text class="sub" x="395" y="145">图注意力网络 GAT</text>
+  <text class="sub" x="395" y="168">节点=文档元素</text>
+  <path class="arrow" d="M500,130 L555,130" marker-end="url(#arrow)"/>
+  <rect class="box" x="560" y="70" width="180" height="120"/>
+  <text class="ttl" x="650" y="115">序列标注模块</text>
+  <text class="sub" x="650" y="145">CRF 解码</text>
+  <text class="sub" x="650" y="168">全局最优标签序列</text>
+  <text class="cap" x="130" y="60">输入：学术论文页面</text>
+  <text class="cap" x="650" y="60">输出：结构标签</text>
+  <text class="cap" x="380" y="235">端到端结构识别流水线</text>
+</svg>

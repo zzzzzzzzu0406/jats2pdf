@@ -15,7 +15,7 @@ JATS (Journal Article Tag Suite) 参考: https://jats.nlm.nih.gov/
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 from lxml import etree
 
 # ─── 数据模型 ───────────────────────────────────────────
@@ -49,13 +49,30 @@ class Figure:
     number: int = 0          # 自动编号(按文档顺序)
 
 @dataclass
+class TableCell:
+    """JATS 表格单元格，保留结构化排版信息。"""
+    text: str = ""
+    colspan: int = 1
+    rowspan: int = 1
+    is_header: bool = False
+    align: str = ""
+
+
+@dataclass
 class Table:
-    """表格"""
+    """表格。
+
+    headers/rows 保留给旧模板、旧测试和已存储 pickle 降级使用；
+    新渲染优先使用 header_rows/body_rows，以保留多行表头与跨行跨列。
+    """
     id: str = ""
     label: str = ""
     caption: str = ""
     headers: list[str] = field(default_factory=list)
     rows: list[list[str]] = field(default_factory=list)
+    header_rows: list[list[TableCell]] = field(default_factory=list)
+    body_rows: list[list[TableCell]] = field(default_factory=list)
+    footnotes: list[str] = field(default_factory=list)
     number: int = 0
 
 @dataclass
@@ -102,6 +119,19 @@ class Paragraph:
     """段落：有序的内联片段序列"""
     runs: list = field(default_factory=list)
 
+
+@dataclass
+class ContentBlock:
+    """正文中的有序内容块。
+
+    kind: paragraph | section | figure | table | formula
+    value: 对应的 Paragraph / Section / Figure / Table / Formula 对象
+    """
+
+    kind: str = "paragraph"
+    value: Any = None
+
+
 @dataclass
 class Section:
     """论文章节"""
@@ -112,6 +142,7 @@ class Section:
     figures: list[Figure] = field(default_factory=list)
     tables: list[Table] = field(default_factory=list)
     formulas: list[Formula] = field(default_factory=list)
+    blocks: list[ContentBlock] = field(default_factory=list)
 
 @dataclass
 class Article:
@@ -125,12 +156,16 @@ class Article:
     keywords: list[str] = field(default_factory=list)
     keywords_en: list[str] = field(default_factory=list)
     doi: str = ""
+    pmcid: str = ""
     journal: str = ""
+    publication_year: Optional[int] = None
     lang: str = "zh"        # zh / en，决定图表/标题标签语言
     sections: list[Section] = field(default_factory=list)
     references: list[Reference] = field(default_factory=list)
     figures: list[Figure] = field(default_factory=list)    # 浮动图表
     tables: list[Table] = field(default_factory=list)
+    formulas: list[Formula] = field(default_factory=list)
+    blocks: list[ContentBlock] = field(default_factory=list)
     xref_map: dict = field(default_factory=dict)  # rid → {type,number,anchor,label}
 
     # ── 交叉引用解析辅助（供模板调用）──
@@ -197,7 +232,13 @@ class JATSParser:
 
     def __init__(self, xml_path: str):
         self.xml_path = xml_path
-        self.tree = etree.parse(xml_path)
+        parser = etree.XMLParser(
+            resolve_entities=False,
+            no_network=True,
+            recover=False,
+            huge_tree=False,
+        )
+        self.tree = etree.parse(xml_path, parser)
         self.root = self.tree.getroot()
 
     def parse(self) -> Article:
@@ -228,8 +269,9 @@ class JATSParser:
         if body is not None:
             self._parse_body(body, article)
 
-        if back is not None:
-            self._parse_back(back, article)
+        # 某些真实 JATS（如 PMC 的 flat XML）把 ref-list 放在 body/sec 中而没有 back。
+        # 有 back 时限制在 back 内，避免扫描无关节点；无 back 时回退扫描整篇 article。
+        self._parse_back(back if back is not None else article_el, article)
 
         # 语言检测（决定图表/章节标签语言：图/Figure、参考文献/References）
         al = (article_el.get("{http://www.w3.org/XML/1998/namespace}lang", "") or "").lower()
@@ -256,11 +298,26 @@ class JATSParser:
         # 期刊名（journal-meta/journal-title-group/journal-title）— 用于页眉 running header
         article.journal = _text(front, ".//*[local-name()='journal-title']")
 
-        # DOI
+        # DOI / PMCID（PMCID 用于缺失图片时解析可信 PMC CDN 资源）
         for el in front.iter():
-            if el.tag.endswith("article-id") and el.get("pub-id-type") == "doi":
-                article.doi = (el.text or "").strip()
-                break
+            if _local(el.tag) != "article-id":
+                continue
+            id_type = (el.get("pub-id-type") or "").lower()
+            value = (el.text or "").strip()
+            if id_type == "doi" and not article.doi:
+                article.doi = value
+            elif id_type in {"pmcid", "pmc", "pmcaid"} and not article.pmcid:
+                article.pmcid = value.upper()
+                if article.pmcid.isdigit():
+                    article.pmcid = f"PMC{article.pmcid}"
+
+        # 文章出版年份（供平台筛选；不能用第一条参考文献年份代替）
+        year_text = _text(
+            front,
+            ".//*[local-name()='article-meta']/*[local-name()='pub-date'][1]/*[local-name()='year']",
+        )
+        if year_text.isdigit():
+            article.publication_year = int(year_text)
 
         # 机构 <aff>（先解析，供作者关联查序号）
         aff_index: dict[str, int] = {}   # aff id → 序号
@@ -288,7 +345,20 @@ class JATSParser:
         for contrib in front.iter():
             if not _local(contrib.tag) == "contrib":
                 continue
-            if contrib.get("contrib-type") != "author":
+            contrib_type = (contrib.get("contrib-type") or "").lower()
+            parent = contrib.getparent()
+            group_type = ""
+            if parent is not None and _local(parent.tag) == "contrib-group":
+                group_type = (
+                    parent.get("content-type")
+                    or parent.get("contrib-type")
+                    or ""
+                ).lower()
+            # 真实 PMC 常用 <contrib-group content-type="author"><contrib>，
+            # 单个 contrib 不一定带 contrib-type。明确为非作者的贡献者仍跳过。
+            if contrib_type and contrib_type != "author":
+                continue
+            if not contrib_type and group_type and group_type not in {"author", "authors"}:
                 continue
             author = Author()
             author.given_name = _text(contrib, ".//*[local-name()='given-names']")
@@ -350,53 +420,82 @@ class JATSParser:
     # ── body：章节、段落(含 xref/inline-formula)、图表、公式 ──
 
     def _parse_body(self, body, article: Article):
-        current_section = None
-        section_stack: list[Section] = []
+        """按 XML 直接子节点递归解析，保留段落/图/表/公式/子章节的真实顺序。
 
-        for el in body.iter():
-            tag = _local(el.tag)
+        旧实现使用 ``body.iter()`` 扁平遍历，无法感知离开子章节的时刻，导致父章节
+        尾段和 body 根段被错误归入最后一个子章节；caption 内的 p 也会被重复当正文。
+        """
+        for child in body:
+            self._parse_content_child(child, article)
 
-            if tag == "sec":
-                level = self._get_section_level(el)
-                sec = Section(
-                    title=_text(el, "./*[local-name()='title']"),
-                    level=level,
-                )
-                # 找到合适的父章节
-                while section_stack and section_stack[-1].level >= level:
-                    section_stack.pop()
-                if section_stack:
-                    section_stack[-1].subsections.append(sec)
-                else:
-                    article.sections.append(sec)
-                section_stack.append(sec)
-                current_section = sec
+    def _parse_section(self, sec_el) -> Section:
+        """递归解析单个 <sec>，并保留其直接子内容顺序。"""
+        section = Section(
+            title=_text(sec_el, "./*[local-name()='title']"),
+            level=self._get_section_level(sec_el),
+        )
+        for child in sec_el:
+            if _local(child.tag) == "title":
+                continue
+            self._parse_content_child(child, section)
+        return section
 
-            elif tag == "p":
-                para = self._parse_paragraph(el)
-                if para.runs and current_section:
-                    current_section.paragraphs.append(para)
+    def _parse_content_child(self, el, container):
+        """解析 body/sec 的一个直接子元素并追加到有序 blocks。"""
+        tag = _local(el.tag)
 
-            elif tag == "fig":
-                fig = self._parse_figure(el)
-                if current_section:
-                    current_section.figures.append(fig)
-                else:
-                    article.figures.append(fig)
+        if tag == "sec":
+            if (el.get("sec-type") or "").lower() == "ref-list":
+                return
+            self._append_block(container, "section", self._parse_section(el))
+        elif tag == "p":
+            para = self._parse_paragraph(el)
+            if para.runs:
+                self._append_block(container, "paragraph", para)
+        elif tag == "fig":
+            self._append_block(container, "figure", self._parse_figure(el))
+        elif tag == "table-wrap":
+            self._append_block(container, "table", self._parse_table(el))
+        elif tag == "disp-formula":
+            self._append_block(
+                container,
+                "formula",
+                self._parse_formula(el, inline=False),
+            )
+        elif tag in {"fig-group", "boxed-text", "list", "list-item"}:
+            # 常见正文容器：只递归其直接内容，仍然避开 caption/table 内部的 p。
+            for child in el:
+                child_tag = _local(child.tag)
+                if child_tag in {"title", "label", "caption"}:
+                    continue
+                self._parse_content_child(child, container)
 
-            elif tag == "table-wrap":
-                tbl = self._parse_table(el)
-                if current_section:
-                    current_section.tables.append(tbl)
-                else:
-                    article.tables.append(tbl)
+    @staticmethod
+    def _append_block(container, kind: str, value):
+        """同时维护新 blocks 与旧分类列表，兼容既有调用和历史 pickle。"""
+        container.blocks.append(ContentBlock(kind=kind, value=value))
 
-            elif tag == "disp-formula":
-                formula = self._parse_formula(el, inline=False)
-                if current_section:
-                    current_section.formulas.append(formula)
+        if isinstance(container, Article):
+            if kind == "section":
+                container.sections.append(value)
+            elif kind == "figure":
+                container.figures.append(value)
+            elif kind == "table":
+                container.tables.append(value)
+            elif kind == "formula":
+                container.formulas.append(value)
+            return
 
-            # inline-formula 由 _parse_paragraph 在段落内部捕获为 FormulaRun，不在此重复登记
+        if kind == "paragraph":
+            container.paragraphs.append(value)
+        elif kind == "section":
+            container.subsections.append(value)
+        elif kind == "figure":
+            container.figures.append(value)
+        elif kind == "table":
+            container.tables.append(value)
+        elif kind == "formula":
+            container.formulas.append(value)
 
     def _parse_paragraph(self, p_el) -> Paragraph:
         """解析 <p> 为 Paragraph，按直接子节点顺序保留 <xref> 与 <inline-formula> 的内联结构。"""
@@ -477,9 +576,40 @@ class JATSParser:
                 r.pages = lp
             r.doi = _text(ref, ".//*[local-name()='pub-id' and @pub-id-type='doi']")
             r.url = _text(ref, ".//*[local-name()='ext-link']")
+            if not r.doi:
+                doi_links = ref.xpath(
+                    ".//*[local-name()='ext-link' and @ext-link-type='doi']"
+                )
+                if doi_links:
+                    doi_el = doi_links[0]
+                    r.doi = (
+                        doi_el.get("{http://www.w3.org/1999/xlink}href", "")
+                        or "".join(doi_el.itertext()).strip()
+                    )
+            if not r.url:
+                url_links = ref.xpath(
+                    ".//*[local-name()='ext-link' and (@ext-link-type='uri' or @ext-link-type='url')]"
+                )
+                if url_links:
+                    url_el = url_links[0]
+                    r.url = (
+                        url_el.get("{http://www.w3.org/1999/xlink}href", "")
+                        or "".join(url_el.itertext()).strip()
+                    )
             r.publisher = _text(ref, ".//*[local-name()='publisher-name']")
             r.publisher_loc = _text(ref, ".//*[local-name()='publisher-loc']")
             r.edition = _text(ref, ".//*[local-name()='edition']")
+
+            # mixed-citation 常只有整条 citation-string，没有结构化作者/题名字段。
+            # 保留原始引用文本，至少保证真实论文不会静默丢失参考文献内容。
+            if not (r.authors or r.title or r.journal):
+                raw = _text(
+                    ref,
+                    ".//*[local-name()='named-content' and @content-type='citation-string']",
+                )
+                if not raw:
+                    raw = _text(ref, ".//*[local-name()='mixed-citation']")
+                r.title = raw
             article.references.append(r)
 
     # ─── 自动编号 + xref_map ───────────────────────────
@@ -502,9 +632,27 @@ class JATSParser:
             if obj.id and obj.id != anchor:
                 article.xref_map[obj.id] = article.xref_map[anchor]
 
-        def walk(sections):
+        def register_block(block):
             nonlocal fig_no, tbl_no, eq_no
-            for sec in sections:
+            if block.kind == "figure":
+                fig_no += 1
+                reg(block.value, "fig", fig_no, fig_tmpl)
+            elif block.kind == "table":
+                tbl_no += 1
+                reg(block.value, "table", tbl_no, tbl_tmpl)
+            elif block.kind == "formula" and not block.value.is_inline:
+                eq_no += 1
+                reg(block.value, "formula", eq_no, "({n})")
+            elif block.kind == "section":
+                walk_section(block.value)
+
+        def walk_section(sec):
+            nonlocal fig_no, tbl_no, eq_no
+            if getattr(sec, "blocks", None):
+                for block in sec.blocks:
+                    register_block(block)
+            else:
+                # 兼容旧对象：旧模型没有 blocks，只能按原分类列表顺序编号。
                 for fig in sec.figures:
                     fig_no += 1
                     reg(fig, "fig", fig_no, fig_tmpl)
@@ -516,16 +664,25 @@ class JATSParser:
                         continue
                     eq_no += 1
                     reg(fm, "formula", eq_no, "({n})")
-                walk(sec.subsections)
+                for sub in sec.subsections:
+                    walk_section(sub)
 
-        walk(article.sections)
-        # 浮动图表（不在 section 内的）
-        for fig in article.figures:
-            fig_no += 1
-            reg(fig, "fig", fig_no, fig_tmpl)
-        for tbl in article.tables:
-            tbl_no += 1
-            reg(tbl, "table", tbl_no, tbl_tmpl)
+        if getattr(article, "blocks", None):
+            for block in article.blocks:
+                register_block(block)
+        else:
+            for sec in article.sections:
+                walk_section(sec)
+            # 兼容旧对象中的根级浮动内容。
+            for fig in article.figures:
+                fig_no += 1
+                reg(fig, "fig", fig_no, fig_tmpl)
+            for tbl in article.tables:
+                tbl_no += 1
+                reg(tbl, "table", tbl_no, tbl_tmpl)
+            for fm in getattr(article, "formulas", []):
+                eq_no += 1
+                reg(fm, "formula", eq_no, "({n})")
 
         # 参考文献编号 + 登记（供 bibr 交叉引用渲染为 [N]，锚点指向参考文献列表项）
         for i, ref in enumerate(article.references, 1):
@@ -574,20 +731,106 @@ class JATSParser:
             tbl.caption = _text(tbl_el, ".//*[local-name()='caption']//*[local-name()='title']")
         if not tbl.caption:
             tbl.caption = _text(tbl_el, ".//*[local-name()='caption']")
-        # 表头
-        for th in tbl_el.iter():
-            if _local(th.tag) == "th" and th.text:
-                tbl.headers.append(th.text.strip())
-        # 数据行
-        for tr in tbl_el.iter():
-            if _local(tr.tag) != "tr":
-                continue
-            row = []
-            for td in tr:
-                if _local(td.tag) == "td":
-                    row.append("".join(td.itertext()).strip())
-            if row:
-                tbl.rows.append(row)
+
+        # table-wrap 中可能还有表注等元素，只解析实际 <table> 内的行。
+        table_el = tbl_el if _local(tbl_el.tag) == "table" else None
+        if table_el is None:
+            table_el = next(
+                (node for node in tbl_el.iter() if _local(node.tag) == "table"),
+                None,
+            )
+
+        def parse_span(raw: str | None) -> int:
+            try:
+                value = int(raw or "1")
+            except (TypeError, ValueError):
+                return 1
+            return value if 1 <= value <= 1000 else 1
+
+        def parse_row(tr, force_header: bool = False) -> list[TableCell]:
+            cells = []
+            for cell_el in tr:
+                cell_type = _local(cell_el.tag)
+                if cell_type not in {"td", "th"}:
+                    continue
+                align = (cell_el.get("align", "") or "").strip().lower()
+                if align not in {"left", "center", "right", "char"}:
+                    align = ""
+                cells.append(TableCell(
+                    text="".join(cell_el.itertext()).strip(),
+                    colspan=parse_span(cell_el.get("colspan")),
+                    rowspan=parse_span(cell_el.get("rowspan")),
+                    is_header=force_header or cell_type == "th",
+                    align=align,
+                ))
+            return cells
+
+        if table_el is not None:
+            for group in table_el:
+                group_type = _local(group.tag)
+                if group_type == "thead":
+                    for tr in group:
+                        if _local(tr.tag) == "tr":
+                            row = parse_row(tr, force_header=True)
+                            if row:
+                                tbl.header_rows.append(row)
+                elif group_type in {"tbody", "tfoot"}:
+                    for tr in group:
+                        if _local(tr.tag) == "tr":
+                            row = parse_row(tr)
+                            if row:
+                                tbl.body_rows.append(row)
+                elif group_type == "tr":
+                    row = parse_row(group)
+                    if not row:
+                        continue
+                    if all(cell.is_header for cell in row):
+                        tbl.header_rows.append(row)
+                    else:
+                        tbl.body_rows.append(row)
+
+        # 兼容字段：新对象仍可被旧模板或外部调用方消费。
+        tbl.headers = [cell.text for row in tbl.header_rows for cell in row]
+        tbl.rows = [[cell.text for cell in row] for row in tbl.body_rows]
+
+        # 表注位于 table-wrap-foot，不能丢入普通数据行。
+        foot = next(
+            (node for node in tbl_el.iter() if _local(node.tag) == "table-wrap-foot"),
+            None,
+        )
+        if foot is not None:
+            footnotes = []
+            fn_nodes = [node for node in foot.iter() if _local(node.tag) == "fn"]
+            for fn in fn_nodes:
+                label = next(
+                    (
+                        "".join(child.itertext()).strip()
+                        for child in fn
+                        if _local(child.tag) == "label"
+                    ),
+                    "",
+                )
+                paragraphs = [
+                    "".join(node.itertext()).strip()
+                    for node in fn.iter()
+                    if _local(node.tag) == "p"
+                ]
+                for index, text in enumerate(paragraphs):
+                    if text:
+                        footnotes.append(
+                            f"{label} {text}".strip() if index == 0 and label else text
+                        )
+            if not fn_nodes:
+                footnotes = [
+                    "".join(node.itertext()).strip()
+                    for node in foot.iter()
+                    if _local(node.tag) == "p" and "".join(node.itertext()).strip()
+                ]
+            tbl.footnotes = footnotes
+            if not tbl.footnotes:
+                text = "".join(foot.itertext()).strip()
+                if text:
+                    tbl.footnotes.append(text)
         return tbl
 
     def _parse_formula(self, fm_el, inline: bool = False) -> Formula:

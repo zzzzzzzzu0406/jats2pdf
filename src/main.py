@@ -97,7 +97,13 @@ def main():
     # ──────────────────────────────────────
     logger.info("🔧 正在渲染 HTML...")
     html_renderer = HTMLRenderer()
-    html_content = html_renderer.render(article, ref_style=args.ref_style)
+    input_base = os.path.dirname(os.path.abspath(args.input))
+    html_content = html_renderer.render(
+        article,
+        ref_style=args.ref_style,
+        asset_mode="local",
+        asset_base=input_base,
+    )
 
     # 双栏模式：在 <body> 上添加 class
     if args.two_column:
@@ -123,7 +129,7 @@ def main():
     try:
         from .renderer.pdf_renderer import PDFRenderer
         pdf_renderer = PDFRenderer(css_path=args.css)
-        pdf_renderer.render_to_file(html_content, args.output)
+        pdf_renderer.render_to_file(html_content, args.output, base_url=input_base)
         logger.info(f"🎉 PDF 生成完成: {args.output}")
     except Exception as e:
         logger.error(f"❌ PDF 生成失败: {e}")

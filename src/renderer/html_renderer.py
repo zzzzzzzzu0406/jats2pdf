@@ -6,7 +6,11 @@ HTML 渲染器 v3.0：支持多页面平台渲染
 """
 
 import os
-from jinja2 import Environment, FileSystemLoader
+import re
+import urllib.parse
+from pathlib import Path
+
+from jinja2 import Environment, FileSystemLoader, pass_context, select_autoescape
 from ..parser.jats_parser import Article
 
 _TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
@@ -20,19 +24,43 @@ class HTMLRenderer:
         self.template_dir = template_dir
         self.env = Environment(
             loader=FileSystemLoader(template_dir),
-            autoescape=False,
+            autoescape=select_autoescape(enabled_extensions=("html", "xml")),
             trim_blocks=True,
             lstrip_blocks=True,
         )
         self.env.filters["orcid_url"] = lambda o: f"https://orcid.org/{o}" if o else "#"
 
-        def _resolve_image(href: str) -> str:
+        @pass_context
+        def _resolve_image(context, href: str) -> str:
             if not href:
                 return href
-            if href.startswith(("http://", "https://", "data:", "//")):
+            if href.startswith("data:"):
                 return href
+            if href.startswith(("http://", "https://", "//")):
+                return href if context.get("allow_remote_assets", False) else ""
+
+            asset_mode = context.get("asset_mode", "local")
+            asset_base = context.get("asset_base")
+            if asset_mode == "local" and asset_base:
+                base = Path(asset_base).resolve()
+                candidate = (base / href).resolve()
+                if candidate.is_file() and (candidate == base or base in candidate.parents):
+                    return candidate.as_uri()
+                return href
+
             safe = os.path.basename(href)
-            return f"/api/files/{safe}" if safe else href
+            if asset_mode == "web" and safe:
+                article = context.get("article")
+                pmcid = str(getattr(article, "pmcid", "") or "").upper()
+                article_id = str(getattr(article, "id", "") or "")
+                params = {}
+                if re.fullmatch(r"[0-9a-f]{8}", article_id):
+                    params["article_id"] = article_id
+                if re.fullmatch(r"PMC\d+", pmcid):
+                    params["pmcid"] = pmcid
+                suffix = f"?{urllib.parse.urlencode(params)}" if params else ""
+                return f"/api/files/{safe}{suffix}"
+            return href
 
         self.env.filters["resolve_image"] = _resolve_image
 
@@ -61,18 +89,36 @@ class HTMLRenderer:
 
     # ── 通用入口（CLI / 测试使用） ──
 
-    def render(self, article: Article, ref_style: str = "elsevier") -> str:
+    def render(
+        self,
+        article: Article,
+        ref_style: str = "elsevier",
+        asset_mode: str = "local",
+        asset_base: str | None = None,
+    ) -> str:
         """渲染单篇论文为自包含 HTML。
 
         v3.0 重构后渲染器拆分为多页面方法（render_article/render_index/...），
         此方法作为 CLI（main.py）与单元测试的统一入口，转发到论文详情页。
         ref_style: 参考文献格式，elsevier（默认）或 gbt7714。
         """
-        return self.render_article(article, ref_style=ref_style)
+        return self.render_article(
+            article,
+            ref_style=ref_style,
+            asset_mode=asset_mode,
+            asset_base=asset_base,
+        )
 
     # ── 各页面渲染方法 ──
 
-    def render_article(self, article: Article, ref_style: str = "elsevier") -> str:
+    def render_article(
+        self,
+        article: Article,
+        ref_style: str = "elsevier",
+        two_column: bool = False,
+        asset_mode: str = "local",
+        asset_base: str | None = None,
+    ) -> str:
         """渲染论文详情页"""
         return self._render_page("article.html", {
             "article": article,
@@ -82,6 +128,13 @@ class HTMLRenderer:
             "active_page": "browse",
             "journal_name": article.journal or None,
             "ref_style": ref_style,
+            "two_column": two_column,
+            "asset_mode": asset_mode,
+            "asset_base": asset_base,
+            "allow_remote_assets": False,
+            "citation_authors": ", ".join(
+                f"{author.surname}{author.given_name}" for author in article.authors[:3]
+            ),
         })
 
     def render_index(self, articles: list[Article], journal_name: str = "") -> str:

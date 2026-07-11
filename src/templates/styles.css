@@ -311,7 +311,20 @@ body {
 
 .table-wrap {
   margin: 2rem 0;
+  max-width: 100%;
+}
+
+.table-scroll {
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border-radius: 4px;
+  box-shadow: var(--shadow-sm);
+}
+
+.table-scroll:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /* 题注在表上方 */
@@ -330,10 +343,10 @@ body {
 /* 三线表 */
 .data-table {
   width: 100%;
+  min-width: 640px;
   border-collapse: collapse;
   font-size: 14px;
   background: var(--color-surface);
-  box-shadow: var(--shadow-sm);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -350,13 +363,30 @@ body {
   text-align: left;
   font-size: 13px;
   letter-spacing: 0.3px;
+  vertical-align: middle;
 }
 
 .data-table td {
   padding: 9px 14px;
   text-align: left;
   border-bottom: 1px solid var(--color-border-light);
+  vertical-align: top;
 }
+
+.data-table thead tr + tr th {
+  border-top: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.data-table tbody th {
+  color: var(--color-text);
+  background: #f1f5f8;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.data-table .cell-align-center { text-align: center; }
+.data-table .cell-align-right,
+.data-table .cell-align-char { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table .cell-align-left { text-align: left; }
 
 .data-table tbody tr:nth-child(even) {
   background: var(--color-table-stripe);
@@ -368,6 +398,18 @@ body {
 
 .data-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.table-notes {
+  margin-top: 0.5rem;
+  color: var(--color-text-sub);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.table-notes p {
+  margin: 0.2rem 0;
+  text-indent: 0;
 }
 
 /* ═══════════════ 公式 ═══════════════ */
@@ -565,7 +607,7 @@ body.two-column .references {
 }
 
 /* ── 难点2：跨页处理 — 图表/公式不跨页、标题不与正文分离 ── */
-.figure, .table-wrap, .formula-wrap { break-inside: avoid; }
+.abstract, .figure, .table-wrap, .formula-wrap { break-inside: avoid; }
 h1, h2, h3, h4 { break-after: avoid; }
 
 /* ════════════════════════════════════════════════════════════
@@ -574,7 +616,7 @@ h1, h2, h3, h4 { break-after: avoid; }
    ════════════════════════════════════════════════════════════ */
 @media print {
   /* 正文：宋体 10pt、行距 1.6、首行缩进 2em、两端对齐 */
-  .article-content .section p { font-size: 10pt; line-height: 1.6; text-indent: 2em; text-align: justify; }
+  .article-content .article-paragraph { font-size: 10pt; line-height: 1.6; text-indent: 2em; text-align: justify; }
   /* 标题：黑体 */
   .article-content .article-title { font-size: 16pt; font-weight: 700; }
   .article-content .article-subtitle { font-size: 12pt; }
@@ -597,11 +639,47 @@ h1, h2, h3, h4 { break-after: avoid; }
   .article-content .data-table { font-size: 8.5pt; }
   .article-content .data-table th, .article-content .data-table td { padding: 4px 8px; }
   .article-content .reference-item { font-size: 8.5pt; padding-left: 2em; text-indent: -2em; line-height: 1.6; }
+  .article-content .references { margin-top: 1.25rem; padding-top: 0.75rem; }
+  .article-content .references h2 { margin-bottom: 0.75rem; }
+  .article-content .reference-item { margin-bottom: 0.25rem; line-height: 1.45; }
+
+  /* PDF 使用真正的学术三线表；网页端仍保留平台视觉样式。 */
+  .article-content .data-table {
+    background: #fff;
+    min-width: 0;
+    border-top: 1.5pt solid #000;
+    border-bottom: 1.5pt solid #000;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .article-content .data-table thead {
+    color: #000;
+    background: #fff;
+    border-bottom: 0.75pt solid #000;
+  }
+  .article-content .data-table th,
+  .article-content .data-table td {
+    border: 0;
+    background: #fff;
+  }
+  .article-content .data-table tbody tr:nth-child(even) { background: #fff; }
+  .article-content .table-scroll { overflow: visible; border-radius: 0; box-shadow: none; }
+  .article-content .table-notes { font-size: 8pt; }
+
+  /* 打印稿去除网页卡片装饰，回归期刊版式。 */
+  .article-content .figure,
+  .article-content .formula-wrap {
+    background: #fff;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+  }
 
   /* 嵌入 SVG 公式尺寸约束（防溢出栏宽，需求4）*/
   .formula-wrap { text-align: center; }
   .formula-wrap svg { max-width: 100%; height: auto; display: inline-block; vertical-align: middle; }
-  .article-content .section p svg, .inline-formula svg { height: 1em; vertical-align: -0.2em; display: inline-block; }
+  .article-content .article-paragraph svg, .inline-formula svg { height: 1em; vertical-align: -0.2em; display: inline-block; }
 .inline-formula .formula-mathml { display: inline; }
 
   /* 交叉引用链接样式 + 跳转高亮（需求3）*/

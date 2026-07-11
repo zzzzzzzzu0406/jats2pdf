@@ -140,50 +140,101 @@
     {% endmacro %}
     {% macro ref_gbt(ref) %}{% set gtype = {'journal':'J','book':'M','conference':'C','thesis':'D','web':'EB/OL'}.get(ref.pub_type, 'J') %}{% if ref.authors %}{{ ref.authors }}. {% endif %}{% if ref.title %}{{ ref.title }}[{{ gtype }}]. {% endif %}{% if ref.journal %}{{ ref.journal }}, {% endif %}{% if ref.year %}{{ ref.year }}{% endif %}{% if ref.volume %}, {{ ref.volume }}{% endif %}{% if ref.issue %}({{ ref.issue }}){% endif %}{% if ref.pages %}: {{ ref.pages }}.{% endif %}{% if ref.doi %} DOI: {{ ref.doi }}.{% endif %}{% endmacro %}
 
-    {# ── 章节递归宏：标题+段落在 <section> 内参与双栏流；
-          图表/公式提升为 .layout-main 直接子元素（column-span:all 才能在 WeasyPrint 生效）── #}
-    {% macro render_section(section, number) %}
-<section class="section level-{{ section.level }}" id="sec-{{ number }}">
-  <h{{ [section.level + 1, 6] | min }} class="section-title">{{ number }}&ensp;{{ section.title }}</h{{ [section.level + 1, 6] | min }}>
-  {% for para in section.paragraphs %}
-  <p>{% for run in para.runs %}{% if run.kind == 'xref' %}<a href="#{{ article.xref_anchor(run.rid) }}" class="xref xref-{{ run.ref_type }}">{{ article.xref_label(run.rid, run.text) }}</a>{% elif run.kind == 'formula' %}{{ render_inline_formula(run.formula) }}{% else %}{{ run.text }}{% endif %}{% endfor %}</p>
-  {% endfor %}
-</section>
-{% for fig in section.figures %}
+    {# ── 有序正文块渲染：所有块保持 JATS 原顺序，并作为 .layout-main 直接子元素，
+          这样图表/公式仍可用 column-span:all 跨栏。旧 pickle 无 blocks 时走兼容分支。── #}
+    {% macro render_paragraph(para) %}
+<p class="article-paragraph">{% for run in para.runs %}{% if run.kind == 'xref' %}<a href="#{{ article.xref_anchor(run.rid) }}" class="xref xref-{{ run.ref_type }}">{{ article.xref_label(run.rid, run.text) }}</a>{% elif run.kind == 'formula' %}{{ render_inline_formula(run.formula) }}{% else %}{{ run.text }}{% endif %}{% endfor %}</p>
+    {% endmacro %}
+
+    {% macro render_figure(fig) %}
 <figure class="figure" id="{{ fig.id or 'fig-' ~ fig.number }}">
-  {% if fig.graphic_href %}<img src="{{ fig.graphic_href | resolve_image }}" alt="{{ fig.caption }}" loading="lazy">{% endif %}
+  {% set image_src = fig.graphic_href | resolve_image %}
+  {% if image_src %}<img src="{{ image_src }}" alt="{{ fig.caption }}" loading="lazy">{% endif %}
   <figcaption><span class="fig-label">{{ fig.label }}</span>&ensp;{{ fig.caption }}</figcaption>
 </figure>
-{% endfor %}
-{% for tbl in section.tables %}
+    {% endmacro %}
+
+    {% macro render_table(tbl) %}
 <div class="table-wrap" id="{{ tbl.id or 'tab-' ~ tbl.number }}">
   <p class="table-caption"><span class="tbl-label">{{ tbl.label }}</span>&ensp;{{ tbl.caption }}</p>
-  <table class="data-table">
-    {% if tbl.headers %}
-    <thead><tr>{% for h in tbl.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
-    {% endif %}
-    <tbody>
-      {% for row in tbl.rows %}
-      <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll" tabindex="0" role="region" aria-label="{{ tbl.label or tbl.caption or '数据表格' }}">
+    <table class="data-table">
+      {% if tbl.header_rows is defined and tbl.body_rows is defined %}
+        {% if tbl.header_rows %}
+        <thead>
+          {% for row in tbl.header_rows %}
+          <tr>{% for cell in row %}<th scope="col"{% if cell.colspan > 1 %} colspan="{{ cell.colspan }}"{% endif %}{% if cell.rowspan > 1 %} rowspan="{{ cell.rowspan }}"{% endif %}{% if cell.align %} class="cell-align-{{ cell.align }}"{% endif %}>{{ cell.text }}</th>{% endfor %}</tr>
+          {% endfor %}
+        </thead>
+        {% endif %}
+        <tbody>
+          {% for row in tbl.body_rows %}
+          <tr>{% for cell in row %}{% if cell.is_header %}<th scope="row"{% if cell.colspan > 1 %} colspan="{{ cell.colspan }}"{% endif %}{% if cell.rowspan > 1 %} rowspan="{{ cell.rowspan }}"{% endif %}{% if cell.align %} class="cell-align-{{ cell.align }}"{% endif %}>{{ cell.text }}</th>{% else %}<td{% if cell.colspan > 1 %} colspan="{{ cell.colspan }}"{% endif %}{% if cell.rowspan > 1 %} rowspan="{{ cell.rowspan }}"{% endif %}{% if cell.align %} class="cell-align-{{ cell.align }}"{% endif %}>{{ cell.text }}</td>{% endif %}{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      {% else %}
+        {% if tbl.headers %}
+        <thead><tr>{% for h in tbl.headers %}<th scope="col">{{ h }}</th>{% endfor %}</tr></thead>
+        {% endif %}
+        <tbody>
+          {% for row in tbl.rows %}
+          <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      {% endif %}
+    </table>
+  </div>
+  {% if tbl.footnotes is defined and tbl.footnotes %}
+  <div class="table-notes" role="note">
+    {% for note in tbl.footnotes %}<p>{{ note }}</p>{% endfor %}
+  </div>
+  {% endif %}
 </div>
-{% endfor %}
-{% for fm in section.formulas if not fm.is_inline %}
+    {% endmacro %}
+
+    {% macro render_formula(fm) %}
 <div class="formula-wrap" id="{{ fm.id or 'eq-' ~ fm.number }}">
   {% if fm.mathml %}{% if fm.is_svg %}{{ fm.mathml | safe }}{% else %}<span class="formula-mathml">{{ fm.mathml | safe }}</span>{% endif %}{% elif fm.latex %}<div class="formula">$${{ fm.latex }}$$</div>{% endif %}
   <p class="formula-label">{{ fm.label }}</p>
 </div>
-{% endfor %}
-{% for sub in section.subsections %}
-{{ render_section(sub, number ~ "." ~ loop.index) }}
-{% endfor %}
     {% endmacro %}
 
-    {% for section in article.sections %}
-    {{ render_section(section, loop.index | string) }}
-    {% endfor %}
+    {% macro render_section(section, number) %}
+<section class="section level-{{ section.level }}" id="sec-{{ number }}">
+  <h{{ [section.level + 1, 6] | min }} class="section-title">{{ number }}&ensp;{{ section.title }}</h{{ [section.level + 1, 6] | min }}>
+</section>
+{% if section.blocks is defined and section.blocks %}
+  {% set child_no = namespace(value=0) %}
+  {% for block in section.blocks %}
+    {% if block.kind == 'paragraph' %}{{ render_paragraph(block.value) }}
+    {% elif block.kind == 'figure' %}{{ render_figure(block.value) }}
+    {% elif block.kind == 'table' %}{{ render_table(block.value) }}
+    {% elif block.kind == 'formula' %}{{ render_formula(block.value) }}
+    {% elif block.kind == 'section' %}{% set child_no.value = child_no.value + 1 %}{{ render_section(block.value, number ~ "." ~ child_no.value) }}
+    {% endif %}
+  {% endfor %}
+{% else %}
+  {% for para in section.paragraphs %}{{ render_paragraph(para) }}{% endfor %}
+  {% for fig in section.figures %}{{ render_figure(fig) }}{% endfor %}
+  {% for tbl in section.tables %}{{ render_table(tbl) }}{% endfor %}
+  {% for fm in section.formulas if not fm.is_inline %}{{ render_formula(fm) }}{% endfor %}
+  {% for sub in section.subsections %}{{ render_section(sub, number ~ "." ~ loop.index) }}{% endfor %}
+{% endif %}
+    {% endmacro %}
+
+    {% if article.blocks is defined and article.blocks %}
+      {% set root_no = namespace(value=0) %}
+      {% for block in article.blocks %}
+        {% if block.kind == 'section' %}{% set root_no.value = root_no.value + 1 %}{{ render_section(block.value, root_no.value | string) }}
+        {% elif block.kind == 'paragraph' %}{{ render_paragraph(block.value) }}
+        {% elif block.kind == 'figure' %}{{ render_figure(block.value) }}
+        {% elif block.kind == 'table' %}{{ render_table(block.value) }}
+        {% elif block.kind == 'formula' %}{{ render_formula(block.value) }}
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      {% for section in article.sections %}{{ render_section(section, loop.index | string) }}{% endfor %}
+    {% endif %}
 
     <!-- 参考文献 -->
     {% if has_references %}
@@ -205,8 +256,8 @@
 <script>
 // 引用复制
 function copyCitation() {
-  var authors = "{% for a in article.authors[:3] %}{{ a.surname }}{{ a.given_name }}{% if not loop.last %}, {% endif %}{% endfor %}";
-  var citation = authors + ". " + "{{ article.title }}." + " {{ article.journal or '' }}." + " {% if article.doi %}doi:{{ article.doi }}{% endif %}";
+  var authors = {{ citation_authors | tojson }};
+  var citation = authors + ". " + {{ (article.title ~ ".") | tojson }} + " " + {{ ((article.journal or '') ~ ".") | tojson }} + " " + {{ ("doi:" ~ article.doi if article.doi else "") | tojson }};
   navigator.clipboard.writeText(citation).then(function() {
     alert('引用已复制到剪贴板!');
   }).catch(function() {

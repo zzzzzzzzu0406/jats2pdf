@@ -4,84 +4,94 @@
 {% block content %}
 
 <!-- ═══════════════ 上传页标题 ═══════════════ -->
-<section style="background:linear-gradient(135deg,#f0f4f8,#e8eef4);padding:var(--space-2xl) 0 var(--space-xl)">
+<section class="upload-hero">
   <div class="container">
-    <h1 style="font-family:var(--font-heading);font-size:var(--text-h2);font-weight:700;text-align:center;margin-bottom:var(--space-sm)">论文上传与转换</h1>
-    <p style="text-align:center;color:var(--color-text-sub);font-size:var(--text-sm)">
-      上传 JATS XML 格式的学术论文，即时预览排版效果，调整样式后导出
+    <h1>论文上传与转换</h1>
+    <p>
+      上传 JATS XML，或上传包含 XML 与图片的 ZIP 资源包，即时预览并导出
     </p>
   </div>
 </section>
 
-<div class="container" style="padding-top:var(--space-xl);padding-bottom:var(--space-3xl)">
+<div class="container upload-page">
 
   <!-- ── 上传区域 ── -->
-  <div class="upload-zone" id="upload-zone">
-    <div class="upload-icon">📄</div>
-    <div class="upload-title">拖拽 JATS XML 文件到此处</div>
-    <div class="upload-hint">或点击此处选择文件 &nbsp;·&nbsp; 支持 .xml 格式 &nbsp;·&nbsp; JATS 1.0/1.1 标准</div>
-    <input type="file" accept=".xml" id="file-input">
-  </div>
+  <form id="upload-form" novalidate>
+    <label class="upload-zone" id="upload-zone" for="file-input" tabindex="0">
+      <span class="upload-icon" aria-hidden="true">📄</span>
+      <span class="upload-title">拖拽 JATS XML 或资源 ZIP 到此处</span>
+      <span class="upload-hint">支持 .xml，或包含 1 个 XML 与 JPG/PNG 等图片的 .zip 资源包</span>
+      <span class="upload-choose">选择文件</span>
+      <input type="file" accept=".xml,.zip,application/xml,text/xml,application/zip" id="file-input">
+    </label>
 
-  <div id="upload-status" style="text-align:center;margin-top:var(--space-md);font-size:var(--text-sm)"></div>
+    <section class="selected-file" id="selected-file" hidden aria-label="已选文件">
+      <div class="selected-file-icon" aria-hidden="true">XML</div>
+      <div class="selected-file-info">
+        <strong id="selected-file-name"></strong>
+        <span id="selected-file-meta"></span>
+      </div>
+      <button type="button" class="btn btn-outline selected-file-remove" id="btn-remove-file">移除</button>
+    </section>
 
-  <!-- ── 排版设置 ── -->
-  <div class="settings-panel">
-    <div class="settings-group">
-      <div class="settings-label">排版栏数</div>
-      <label style="margin-right:var(--space-md);cursor:pointer">
-        <input type="radio" name="columns" value="single" checked onchange="onSettingsChange()"> 单栏
-      </label>
-      <label style="cursor:pointer">
-        <input type="radio" name="columns" value="double" onchange="onSettingsChange()"> 双栏
-      </label>
-    </div>
-    <div class="settings-group">
-      <div class="settings-label">正文字号</div>
-      <select id="setting-font-size" onchange="onSettingsChange()">
-        <option value="small">小号 (15px)</option>
-        <option value="medium" selected>中号 (17px)</option>
-        <option value="large">大号 (19px)</option>
-      </select>
-    </div>
-    <div class="settings-group">
-      <div class="settings-label">期刊风格</div>
-      <select id="setting-ref-style" onchange="onSettingsChange()">
-        <option value="elsevier" selected>Elsevier 风格</option>
-        <option value="gbt7714">GB/T 7714 风格</option>
-      </select>
-    </div>
-  </div>
+    <div id="upload-status" class="upload-status" role="status" aria-live="polite"></div>
 
-  <!-- ── 操作按钮 ── -->
-  <div style="text-align:center;margin-top:var(--space-xl);display:flex;gap:var(--space-md);justify-content:center;flex-wrap:wrap">
-    <button class="btn btn-primary" id="btn-convert" onclick="handleConvert()">开始转换</button>
-    <button class="btn btn-outline" id="btn-preview" onclick="handlePreview()" disabled>预览效果</button>
-    <button class="btn btn-outline" id="btn-download-html" onclick="handleDownload('html')" disabled>下载 HTML</button>
-    <button class="btn btn-outline" id="btn-download-pdf" onclick="handleDownload('pdf')" disabled>下载 PDF</button>
-  </div>
+    <!-- ── 排版设置 ── -->
+    <fieldset class="settings-panel">
+      <legend>排版设置</legend>
+      <div class="settings-group">
+        <div class="settings-label">排版栏数</div>
+        <div class="settings-options">
+          <label><input type="radio" name="columns" value="single" checked> 单栏</label>
+          <label><input type="radio" name="columns" value="double"> 双栏</label>
+        </div>
+      </div>
+      <div class="settings-group">
+        <label class="settings-label" for="setting-font-size">正文字号</label>
+        <select id="setting-font-size">
+          <option value="small">小号 (15px)</option>
+          <option value="medium" selected>中号 (17px)</option>
+          <option value="large">大号 (19px)</option>
+        </select>
+      </div>
+      <div class="settings-group">
+        <label class="settings-label" for="setting-ref-style">期刊风格</label>
+        <select id="setting-ref-style">
+          <option value="elsevier" selected>Elsevier 风格</option>
+          <option value="gbt7714">GB/T 7714 风格</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <!-- ── 操作按钮 ── -->
+    <div class="upload-actions">
+      <button type="submit" class="btn btn-primary" id="btn-convert" disabled>开始转换</button>
+      <button type="button" class="btn btn-outline" id="btn-preview" disabled>预览效果</button>
+      <button type="button" class="btn btn-outline" id="btn-download-html" disabled>下载 HTML</button>
+      <button type="button" class="btn btn-outline" id="btn-download-pdf" disabled>下载 PDF</button>
+    </div>
+  </form>
 
   <!-- ── 加载指示器 ── -->
-  <div id="loading-indicator" style="display:none;text-align:center;margin-top:var(--space-lg)">
-    <div style="display:inline-block;width:40px;height:40px;border:3px solid var(--color-border);border-top-color:var(--color-accent);border-radius:50%;animation:spin 1s linear infinite"></div>
-    <p style="color:var(--color-text-sub);margin-top:var(--space-sm);font-size:var(--text-sm)">正在转换中...（含公式渲染可能需要数十秒）</p>
+  <div id="loading-indicator" class="loading-indicator" hidden aria-live="polite">
+    <div class="loading-spinner" aria-hidden="true"></div>
+    <p id="loading-text">正在转换中...（含公式渲染可能需要数十秒）</p>
   </div>
-  <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
 
   <!-- ── 预览区 ── -->
-  <div class="preview-area" style="margin-top:var(--space-2xl)">
-    <div class="preview-placeholder" id="preview-placeholder" style="display:flex;align-items:center;justify-content:center;min-height:300px;color:var(--color-text-light);font-size:var(--text-sm);border:2px dashed var(--color-border);border-radius:8px;background:#fafbfc">
-      <div style="text-align:center">
-        <div style="font-size:3rem;margin-bottom:var(--space-md)">📄</div>
+  <div class="preview-area upload-preview">
+    <div class="preview-placeholder" id="preview-placeholder">
+      <div class="preview-placeholder-content">
+        <div class="preview-placeholder-icon" aria-hidden="true">📄</div>
         <div>上传并转换 JATS XML 后，排版效果将在此处实时预览</div>
       </div>
     </div>
-    <div id="preview-container" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-sm)">
-        <span style="font-size:var(--text-sm);font-weight:600;color:var(--color-accent)">📋 排版预览</span>
-        <span style="font-size:var(--text-2xs);color:var(--color-text-light)">可在上方调整栏数、字号、风格后实时刷新</span>
+    <div id="preview-container" hidden>
+      <div class="preview-toolbar">
+        <span>📋 排版预览</span>
+        <small>可在上方调整栏数、字号、风格后实时刷新</small>
       </div>
-      <iframe id="preview-frame" style="width:100%;min-height:800px;border:1px solid var(--color-border);border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.08);background:#fff" sandbox="allow-scripts allow-same-origin"></iframe>
+      <iframe id="preview-frame" title="论文排版预览" sandbox="allow-scripts allow-same-origin"></iframe>
     </div>
   </div>
 </div>
@@ -90,6 +100,74 @@
 // ── 上传页交互逻辑 ──
 var currentArticleId = null;
 var currentFile = null;
+var isConverting = false;
+var previewRequestId = 0;
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function resetPreview() {
+  var frame = document.getElementById('preview-frame');
+  var placeholder = document.getElementById('preview-placeholder');
+  var container = document.getElementById('preview-container');
+  previewRequestId += 1;
+  if (frame) {
+    frame.removeAttribute('srcdoc');
+    frame.style.height = '';
+  }
+  if (container) container.hidden = true;
+  if (placeholder) placeholder.hidden = false;
+}
+
+function selectUploadFile(file) {
+  if (!file) return false;
+  var lowerName = file.name.toLowerCase();
+  var isXml = lowerName.endsWith('.xml');
+  var isZip = lowerName.endsWith('.zip');
+  var maxBytes = isZip ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+  if (!isXml && !isZip) {
+    clearSelectedFile();
+    showStatus('请选择 .xml 或 .zip 格式的 JATS 文件', 'danger');
+    return false;
+  }
+  if (file.size > maxBytes) {
+    clearSelectedFile();
+    showStatus(isZip ? 'ZIP 资源包不能超过 50 MB' : 'XML 文件不能超过 10 MB', 'danger');
+    return false;
+  }
+
+  currentFile = file;
+  currentArticleId = null;
+  setButtonsEnabled(false);
+  resetPreview();
+
+  var card = document.getElementById('selected-file');
+  var icon = card ? card.querySelector('.selected-file-icon') : null;
+  if (icon) icon.textContent = isZip ? 'ZIP' : 'XML';
+  document.getElementById('selected-file-name').textContent = file.name;
+  document.getElementById('selected-file-meta').textContent =
+    (isZip ? 'ZIP 资源包' : 'JATS XML') + ' · ' + formatFileSize(file.size);
+  if (card) card.hidden = false;
+  document.getElementById('btn-convert').disabled = false;
+  showStatus('文件已就绪，请确认排版设置后开始转换', 'success');
+  return true;
+}
+
+function clearSelectedFile() {
+  currentFile = null;
+  currentArticleId = null;
+  var input = document.getElementById('file-input');
+  if (input) input.value = '';
+  var card = document.getElementById('selected-file');
+  if (card) card.hidden = true;
+  document.getElementById('btn-convert').disabled = true;
+  setButtonsEnabled(false);
+  resetPreview();
+  showStatus('已移除文件，可以重新选择', 'info');
+}
 
 // 获取当前设置
 function getSettings() {
@@ -105,15 +183,17 @@ function getSettings() {
 
 // 设置变更时自动刷新预览
 function onSettingsChange() {
-  if (currentArticleId) {
+  if (currentArticleId && !isConverting) {
     handlePreview();
   }
 }
 
 // 显示/隐藏加载状态
-function showLoading(show) {
+function showLoading(show, message) {
   var spinner = document.getElementById('loading-indicator');
-  if (spinner) spinner.style.display = show ? 'block' : 'none';
+  var text = document.getElementById('loading-text');
+  if (text && message) text.textContent = message;
+  if (spinner) spinner.hidden = !show;
 }
 
 // 启用/禁用按钮
@@ -124,21 +204,40 @@ function setButtonsEnabled(enabled) {
   });
 }
 
+function setConversionBusy(busy) {
+  isConverting = busy;
+  var fileInput = document.getElementById('file-input');
+  var removeButton = document.getElementById('btn-remove-file');
+  var convertButton = document.getElementById('btn-convert');
+  var zone = document.getElementById('upload-zone');
+  if (fileInput) fileInput.disabled = busy;
+  if (removeButton) removeButton.disabled = busy;
+  if (convertButton) convertButton.disabled = busy || !currentFile;
+  if (zone) {
+    zone.classList.toggle('is-disabled', busy);
+    zone.setAttribute('aria-busy', busy ? 'true' : 'false');
+  }
+  if (busy) setButtonsEnabled(false);
+  showLoading(busy, '正在上传并解析论文…（含公式渲染可能需要数十秒）');
+}
+
 // 上传并转换
-function handleConvert() {
+function handleConvert(event) {
+  if (event) event.preventDefault();
+  if (isConverting) return;
   // 优先使用拖拽选择的文件，其次使用 file input
   var file = currentFile;
   if (!file) {
     var fileInput = document.getElementById('file-input');
     if (!fileInput.files || fileInput.files.length === 0) {
-      showStatus('请先选择要上传的 JATS XML 文件', 'danger');
+      showStatus('请先选择 JATS XML 或 ZIP 资源包', 'danger');
       return;
     }
     file = fileInput.files[0];
   }
 
   showStatus('正在上传并转换...', 'info');
-  showLoading(true);
+  setConversionBusy(true);
 
   var formData = new FormData();
   formData.append('file', file);
@@ -149,21 +248,20 @@ function handleConvert() {
       return resp.json();
     })
     .then(function(data) {
-      showLoading(false);
       currentArticleId = data.article_id;
-      setButtonsEnabled(true);
-      showStatus('转换成功！共 ' + data.ref_count + ' 篇参考文献', 'success');
-
-      // 自动加载预览（使用设置面板的当前参数）
-      handlePreview();
-
-      // 更新设置选项：根据论文语言预设
       if (data.lang === 'en') {
         document.getElementById('setting-ref-style').value = 'elsevier';
       }
+      setConversionBusy(false);
+      setButtonsEnabled(true);
+      var assetText = data.asset_count ? '，已导入 ' + data.asset_count + ' 张图片' : '';
+      showStatus('转换成功！共 ' + data.ref_count + ' 篇参考文献' + assetText, 'success');
+
+      // 自动加载预览（使用设置面板的当前参数）
+      handlePreview();
     })
     .catch(function(err) {
-      showLoading(false);
+      setConversionBusy(false);
       showStatus('转换失败: ' + err.message, 'danger');
     });
 }
@@ -182,20 +280,20 @@ function handlePreview() {
     font_size: settings.font_size
   });
 
-  showLoading(true);
+  var requestId = ++previewRequestId;
+  showLoading(true, '正在刷新排版预览…');
+  var previewButton = document.getElementById('btn-preview');
+  if (previewButton) previewButton.disabled = true;
   fetch('/api/articles/' + currentArticleId + '/preview?' + params.toString())
     .then(function(resp) {
       if (!resp.ok) throw new Error('预览加载失败');
       return resp.text();
     })
     .then(function(html) {
-      showLoading(false);
+      if (requestId !== previewRequestId) return;
       var frame = document.getElementById('preview-frame');
       var placeholder = document.getElementById('preview-placeholder');
       var container = document.getElementById('preview-container');
-      frame.srcdoc = html;
-      container.style.display = 'block';
-      placeholder.style.display = 'none';
       // 自适应高度：内容加载后调整 iframe 高度
       frame.onload = function() {
         try {
@@ -204,10 +302,18 @@ function handlePreview() {
           frame.style.height = Math.max(800, h + 40) + 'px';
         } catch(e) {}
       };
+      frame.srcdoc = html;
+      container.hidden = false;
+      placeholder.hidden = true;
     })
     .catch(function(err) {
-      showLoading(false);
+      if (requestId !== previewRequestId) return;
       showStatus('预览失败: ' + err.message, 'danger');
+    })
+    .then(function() {
+      if (requestId !== previewRequestId) return;
+      showLoading(false);
+      if (previewButton) previewButton.disabled = !currentArticleId;
     });
 }
 
@@ -240,33 +346,23 @@ function handleDownload(format) {
 function showStatus(msg, type) {
   var status = document.getElementById('upload-status');
   if (!status) return;
-  var colors = { success: 'var(--color-success)', danger: 'var(--color-danger)', info: 'var(--color-accent)' };
-  status.innerHTML = '<span style="color:' + (colors[type] || colors.info) + '">' + msg + '</span>';
+  status.textContent = msg;
+  status.className = 'upload-status status-' + (type || 'info');
 }
 
-// ── 文件选择监听（与 platform.js 拖拽协同）──
-document.addEventListener('DOMContentLoaded', function() {
-  var fileInput = document.getElementById('file-input');
-  if (fileInput) {
-    fileInput.addEventListener('change', function() {
-      if (this.files && this.files.length > 0) {
-        currentFile = this.files[0];
-        var status = document.getElementById('upload-status');
-        if (status) {
-          status.innerHTML = '<span style="color:var(--color-success)">已选择: ' + this.files[0].name + ' (' + (this.files[0].size/1024).toFixed(1) + ' KB)</span>';
-        }
-        // 自动转换
-        handleConvert();
-      }
-    });
-  }
-
-  // 全局函数：供 platform.js 拖拽后调用
-  window.setUploadFile = function(file) {
-    currentFile = file;
-    handleConvert();
-  };
+document.getElementById('upload-form').addEventListener('submit', handleConvert);
+document.getElementById('btn-preview').addEventListener('click', handlePreview);
+document.getElementById('btn-download-html').addEventListener('click', function() { handleDownload('html'); });
+document.getElementById('btn-download-pdf').addEventListener('click', function() { handleDownload('pdf'); });
+document.getElementById('btn-remove-file').addEventListener('click', clearSelectedFile);
+document.querySelectorAll('#upload-form input[name="columns"], #setting-font-size, #setting-ref-style').forEach(function(control) {
+  control.addEventListener('change', onSettingsChange);
 });
+
+// 供 platform.js 的文件选择/拖拽统一调用；选中后只更新状态，不自动提交。
+window.setUploadFile = function(file) {
+  return selectUploadFile(file);
+};
 </script>
 
 {% endblock %}

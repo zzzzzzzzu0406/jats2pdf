@@ -177,6 +177,82 @@ class TestJATSParser:
         tbl = find_tbl(article.sections)
         assert tbl and tbl.caption == "数据集统计信息", "表格题注应解析 caption/title"
 
+    def test_body_order_and_section_ownership(self, tmp_path):
+        """正文块保持原顺序，子章节结束后内容回到父章节。"""
+        xml = """<article>
+        <front><article-meta><title-group><article-title>Order</article-title></title-group></article-meta></front>
+        <body>
+          <sec><title>Parent</title>
+            <p>PARENT_BEFORE</p>
+            <fig id="f1"><caption><p>FIG_CAPTION</p></caption></fig>
+            <p>PARENT_AFTER</p>
+            <sec><title>Child</title><p>CHILD_TEXT</p></sec>
+          </sec>
+          <p>ROOT_TEXT</p>
+        </body></article>"""
+        path = tmp_path / "order.xml"
+        path.write_text(xml, encoding="utf-8")
+
+        article = JATSParser(str(path)).parse()
+        parent = article.sections[0]
+        child = parent.subsections[0]
+
+        assert [block.kind for block in parent.blocks] == [
+            "paragraph", "figure", "paragraph", "section"
+        ]
+        assert [run.text for p in parent.paragraphs for run in p.runs] == [
+            "PARENT_BEFORE", "PARENT_AFTER"
+        ]
+        assert [run.text for p in child.paragraphs for run in p.runs] == ["CHILD_TEXT"]
+        assert all("FIG_CAPTION" not in run.text for p in parent.paragraphs for run in p.runs)
+        assert article.blocks[-1].kind == "paragraph"
+        assert article.blocks[-1].value.runs[0].text == "ROOT_TEXT"
+
+    def test_real_jats_authors_mixed_references_and_year(self):
+        """真实 PMC flat JATS：作者组无 contrib-type，参考文献位于 body/mixed-citation。"""
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "samples", "real", "pmc5684321.xml",
+        )
+        article = JATSParser(path).parse()
+        assert len(article.authors) == 8
+        assert len(article.references) == 43
+        assert article.publication_year == 2017
+        assert article.pmcid == "PMC5684321"
+        assert article.references[0].title.startswith("Sennhauser")
+
+    def test_real_jats_table_structure_and_footnotes(self):
+        """真实 JATS 表格应保留多行表头、跨格、对齐与表注。"""
+        base = os.path.dirname(os.path.dirname(__file__))
+        article = JATSParser(os.path.join(base, "samples", "real", "pmc3128412.xml")).parse()
+
+        def collect_tables(sections):
+            tables = []
+            for section in sections:
+                tables.extend(section.tables)
+                tables.extend(collect_tables(section.subsections))
+            return tables
+
+        table = next(tbl for tbl in collect_tables(article.sections) if tbl.id == "tbl1")
+        assert len(table.header_rows) == 2
+        assert table.header_rows[0][0].rowspan == 2
+        assert table.header_rows[0][2].colspan == 2
+        assert all(cell.is_header for row in table.header_rows for cell in row)
+        assert table.body_rows[0][0].rowspan == 2
+        assert table.body_rows[0][2].align == "char"
+        assert table.footnotes == ["* The gold standard was determined by security officers."]
+        assert table.rows[0][2] == "514", "应同时保留旧 rows 兼容字段"
+
+        grouped = JATSParser(os.path.join(base, "samples", "real", "pmc5684321.xml")).parse()
+        tables = collect_tables(grouped.sections)
+        table2 = next(tbl for tbl in tables if tbl.id == "Tab2")
+        table3 = next(tbl for tbl in tables if tbl.id == "Tab3")
+        assert len(table2.header_rows) == 3
+        assert table2.header_rows[0][0].rowspan == 3
+        assert table2.body_rows[0][0].colspan == 7
+        assert table3.body_rows[0][0].colspan == 5
+        assert len(table3.footnotes) >= 2
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

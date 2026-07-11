@@ -110,7 +110,21 @@ class ArticleStore:
         year = self._extract_year(article)
 
         # 统计公式（递归遍历 sections）
-        formula_count = self._count_formulas(article.sections)
+        formula_count = len(getattr(article, "formulas", [])) + self._count_formulas(
+            article.sections
+        )
+        for block in getattr(article, "blocks", []):
+            if block.kind == "paragraph":
+                formula_count += sum(
+                    1 for run in block.value.runs if run.kind == "formula"
+                )
+
+        figure_count = len(article.figures) + self._count_items(
+            article.sections, "figures"
+        )
+        table_count = len(article.tables) + self._count_items(
+            article.sections, "tables"
+        )
 
         authors_json = [
             {"given_name": a.given_name, "surname": a.surname,
@@ -139,8 +153,8 @@ class ArticleStore:
                 article.lang,
                 len(article.references),
                 len(article.sections),
-                len(article.figures) + sum(len(s.figures) for s in article.sections),
-                len(article.tables) + sum(len(s.tables) for s in article.sections),
+                figure_count,
+                table_count,
                 formula_count,
                 source,
                 filename,
@@ -172,7 +186,7 @@ class ArticleStore:
         return dict(row)
 
     def list_articles(self, page: int = 1, per_page: int = 10,
-                      search: str = "", field: str = "", year: str = "") -> dict:
+                      search: str = "", field: str = "", year: Optional[int] = None) -> dict:
         """分页搜索列表"""
         conditions = []
         params = []
@@ -188,7 +202,7 @@ class ArticleStore:
 
         if year:
             conditions.append("year = ?")
-            params.append(int(year))
+            params.append(year)
 
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
@@ -264,7 +278,9 @@ class ArticleStore:
     @staticmethod
     def _extract_year(article) -> Optional[int]:
         """从各种来源提取年份"""
-        # 尝试从 references 找年份
+        if getattr(article, "publication_year", None):
+            return article.publication_year
+        # 兼容缺少文章出版日期的旧/非标准数据，最后才从参考文献猜测。
         for ref in article.references:
             if ref.year and ref.year.isdigit():
                 return int(ref.year)
@@ -279,5 +295,15 @@ class ArticleStore:
         total = 0
         for s in sections:
             total += len(s.formulas)
+            for paragraph in s.paragraphs:
+                total += sum(1 for run in paragraph.runs if run.kind == "formula")
             total += ArticleStore._count_formulas(s.subsections)
+        return total
+
+    @staticmethod
+    def _count_items(sections, attr: str) -> int:
+        total = 0
+        for section in sections:
+            total += len(getattr(section, attr))
+            total += ArticleStore._count_items(section.subsections, attr)
         return total

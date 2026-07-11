@@ -116,11 +116,13 @@
   var uploadZone = document.querySelector('.upload-zone');
   if (!uploadZone) return;
   var fileInput = uploadZone.querySelector('input[type="file"]');
-  var statusEl = document.getElementById('upload-status');
 
-  // 点击触发文件选择
-  uploadZone.addEventListener('click', function() {
-    if (fileInput) fileInput.click();
+  // label 负责鼠标选择；补充 Enter/Space 键盘操作。
+  uploadZone.addEventListener('keydown', function(e) {
+    if ((e.key === 'Enter' || e.key === ' ') && fileInput && !fileInput.disabled) {
+      e.preventDefault();
+      fileInput.click();
+    }
   });
 
   // 拖拽事件
@@ -157,26 +159,9 @@
   function handleFiles(files) {
     if (!files || files.length === 0) return;
     var file = files[0];
-    if (!file.name.endsWith('.xml')) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--color-danger)">请上传 .xml 格式的 JATS 文件</span>';
-      return;
-    }
-    if (statusEl) {
-      statusEl.innerHTML = '<span style="color:var(--color-success)">已选择: ' + file.name + ' (' + (file.size/1024).toFixed(1) + ' KB)</span>';
-    }
-    // 触发上传转换（调用 upload.html 中的全局函数）
+    // 仅更新待转换文件，由用户点击“开始转换”后再提交。
     if (window.setUploadFile) {
       window.setUploadFile(file);
-    }
-  }
-
-  function updatePreview(xmlContent) {
-    // 不再显示原始 XML；upload API 返回渲染后的 HTML。
-    // 如果还未上传，显示提示
-    var placeholder = document.querySelector('.preview-placeholder');
-    var statusEl2 = document.getElementById('upload-status');
-    if (statusEl2 && placeholder && placeholder.style.display !== 'none') {
-      statusEl2.innerHTML = '<span style="color:var(--color-accent)">正在处理文件，请稍候...</span>';
     }
   }
 })();

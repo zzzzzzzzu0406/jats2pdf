@@ -142,30 +142,37 @@ class FormulaRenderer:
 
     def process_article_formulas(self, article):
         """预处理整篇文章公式：块级公式 + 行内公式（段落 FormulaRun）→ SVG。"""
+        # 0) body 根级公式/段落（真实 JATS 允许内容不包在 sec 内）
+        for fm in getattr(article, "formulas", []):
+            self._process_formula(fm, display=True)
+        for block in getattr(article, "blocks", []):
+            if block.kind == "paragraph":
+                self._process_paragraph_formulas(block.value)
+
         # 1) 块级公式（section.formulas 中 is_inline=False）
         for section in self._iter_sections(article.sections):
             for fm in section.formulas:
                 if fm.is_inline:
                     continue
-                if fm.mathml:
-                    fm.mathml = self.mathml_to_svg(fm.mathml, inline=False)
-                    fm.is_svg = fm.mathml.strip().startswith("<svg")
-                elif fm.latex:
-                    fm.mathml = self.latex_to_svg(fm.latex, display=True)
-                    fm.is_svg = fm.mathml.strip().startswith("<svg")
+                self._process_formula(fm, display=True)
         # 2) 行内公式（段落 runs 中的 FormulaRun）
         for section in self._iter_sections(article.sections):
             for para in section.paragraphs:
-                for run in para.runs:
-                    if run.kind == "formula" and run.formula is not None:
-                        fm = run.formula
-                        if fm.mathml:
-                            fm.mathml = self.mathml_to_svg(fm.mathml, inline=True)
-                            fm.is_svg = fm.mathml.strip().startswith("<svg")
-                        elif fm.latex:
-                            fm.mathml = self.latex_to_svg(fm.latex, display=False)
-                            fm.is_svg = fm.mathml.strip().startswith("<svg")
+                self._process_paragraph_formulas(para)
         return article
+
+    def _process_paragraph_formulas(self, paragraph):
+        for run in paragraph.runs:
+            if run.kind == "formula" and run.formula is not None:
+                self._process_formula(run.formula, display=False)
+
+    def _process_formula(self, formula, display: bool):
+        if formula.mathml:
+            formula.mathml = self.mathml_to_svg(formula.mathml, inline=not display)
+            formula.is_svg = formula.mathml.strip().startswith("<svg")
+        elif formula.latex:
+            formula.mathml = self.latex_to_svg(formula.latex, display=display)
+            formula.is_svg = formula.mathml.strip().startswith("<svg")
 
     def _iter_sections(self, sections):
         """递归遍历所有章节。"""
