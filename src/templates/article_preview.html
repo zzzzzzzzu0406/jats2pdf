@@ -7,8 +7,8 @@
 <style>
 /* ── 预览专用样式：干净、紧凑、适合 iframe 内展示 ── */
 :root {
-  --font-body: "PingFang SC","Songti SC","STSong","SimSun","Noto Serif CJK SC",serif;
-  --font-heading: "PingFang SC","Heiti SC","STHeiti","SimHei","Noto Sans CJK SC",sans-serif;
+  --font-body: "Songti SC","STSong","SimSun","Noto Serif CJK SC",serif;
+  --font-heading: "Heiti SC","PingFang SC","STHeiti","SimHei","Noto Sans CJK SC",sans-serif;
   --color-text: #1a1a1a;
   --color-text-sub: #555;
   --color-accent: #1a5276;
@@ -17,6 +17,19 @@
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+body.font-style-academic {
+  --font-body: "Songti SC","STSong","SimSun","Noto Serif CJK SC",serif;
+  --font-heading: "Heiti SC","PingFang SC","STHeiti","SimHei","Noto Sans CJK SC",sans-serif;
+}
+body.font-style-modern {
+  --font-body: "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif;
+  --font-heading: "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif;
+}
+body.font-style-international {
+  --font-body: "Times New Roman","Songti SC","STSong","Noto Serif CJK SC",serif;
+  --font-heading: Arial,Helvetica,"PingFang SC","Noto Sans CJK SC",sans-serif;
+}
 
 body {
   font-family: var(--font-body);
@@ -117,7 +130,7 @@ body.two-column .references { column-span: all; }
 }
 </style>
 </head>
-<body class="{% if two_column %}two-column{% endif %}">
+<body class="font-style-{{ font_style or 'academic' }}{% if two_column %} two-column{% endif %}">
 
 <div class="article-body">
 

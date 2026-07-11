@@ -687,3 +687,13 @@ h1, h2, h3, h4 { break-after: avoid; }
   .xref:hover { text-decoration: underline; }
   .figure:target, .table-wrap:target, .formula-wrap:target { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 }
+
+/* 用户选择的正文字号同步到 PDF；中号沿用期刊默认 10pt。 */
+@media print {
+  .article-content.font-size-small .article-paragraph { font-size: 9pt; }
+  .article-content.font-size-medium .article-paragraph { font-size: 10pt; }
+  .article-content.font-size-large .article-paragraph { font-size: 11pt; }
+  .article-content.font-size-small .abstract p { font-size: 9pt; }
+  .article-content.font-size-medium .abstract p { font-size: 10pt; }
+  .article-content.font-size-large .abstract p { font-size: 11pt; }
+}

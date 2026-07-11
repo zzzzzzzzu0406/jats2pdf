@@ -204,10 +204,12 @@
 // ── 文章页全局函数 ──
 (function() {
   // 下载文章 PDF
-  window.downloadArticlePDF = function(articleId, refStyle, twoColumn) {
+  window.downloadArticlePDF = function(articleId, refStyle, twoColumn, fontStyle, fontSize) {
     var params = new URLSearchParams({
       ref_style: refStyle || 'elsevier',
-      two_column: twoColumn ? 'true' : 'false'
+      two_column: twoColumn ? 'true' : 'false',
+      font_style: fontStyle || 'academic',
+      font_size: fontSize || 'medium'
     });
     var url = '/api/articles/' + articleId + '/pdf?' + params.toString();
     var a = document.createElement('a');
@@ -219,10 +221,12 @@
   };
 
   // 下载文章 HTML
-  window.downloadArticleHTML = function(articleId, refStyle, twoColumn) {
+  window.downloadArticleHTML = function(articleId, refStyle, twoColumn, fontStyle, fontSize) {
     var params = new URLSearchParams({
       ref_style: refStyle || 'elsevier',
-      two_column: twoColumn ? 'true' : 'false'
+      two_column: twoColumn ? 'true' : 'false',
+      font_style: fontStyle || 'academic',
+      font_size: fontSize || 'medium'
     });
     var url = '/api/articles/' + articleId + '/html?' + params.toString();
     var a = document.createElement('a');

@@ -530,7 +530,32 @@ body{
 /* ═══════════════ 文章内容样式（详情页 + 预览） ═══════════════ */
 .article-content{
   max-width:var(--max-width-article);margin:0 auto;padding:var(--space-xl) 0;
+  font-family:var(--font-body);font-size:var(--text-body);
 }
+.article-content.font-style-academic{
+  --font-body:"Songti SC","STSong","SimSun","宋体","Noto Serif CJK SC",serif;
+  --font-heading:"Heiti SC","PingFang SC","STHeiti","SimHei","黑体","Noto Sans CJK SC",sans-serif;
+  --font-en:"Georgia","Times New Roman","Songti SC",serif;
+}
+.article-content.font-style-modern{
+  --font-body:"PingFang SC","Microsoft YaHei","微软雅黑","Noto Sans CJK SC",Arial,sans-serif;
+  --font-heading:"PingFang SC","Microsoft YaHei","微软雅黑","Noto Sans CJK SC",Arial,sans-serif;
+  --font-en:Arial,Helvetica,"PingFang SC",sans-serif;
+}
+.article-content.font-style-international{
+  --font-body:"Times New Roman","Songti SC","STSong","Noto Serif CJK SC",serif;
+  --font-heading:Arial,Helvetica,"PingFang SC","Noto Sans CJK SC",sans-serif;
+  --font-en:"Times New Roman",Georgia,serif;
+}
+.article-content.font-size-small{--text-body:15px;--text-sm:13px;--text-xs:12px;--text-2xs:11px}
+.article-content.font-size-medium{--text-body:17px;--text-sm:15px;--text-xs:13px;--text-2xs:12px}
+.article-content.font-size-large{--text-body:19px;--text-sm:17px;--text-xs:14px;--text-2xs:12px}
+.article-style-select{
+  width:100%;padding:.4rem .5rem;border:1px solid var(--color-border);
+  border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);
+  font-family:var(--font-heading);font-size:var(--text-2xs);
+}
+.article-style-select:focus-visible{outline:2px solid var(--color-accent-light);outline-offset:1px}
 .article-content .article-header{text-align:center}
 .article-content .article-title{
   font-family:var(--font-heading);font-size:var(--text-h2);

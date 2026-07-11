@@ -324,9 +324,23 @@ def _render_formulas(article_id: str):
     except Exception as e:
         print(f"[server] 公式预渲染失败 {article_id}: {e}")
 
-def _get_settings(ref_style: str = "elsevier", two_column: bool = False):
+def _get_settings(
+    ref_style: str = "elsevier",
+    two_column: bool = False,
+    font_style: str = "academic",
+    font_size: str = "medium",
+):
     """解析渲染参数"""
-    return {"ref_style": ref_style, "two_column": two_column}
+    if font_style not in {"academic", "modern", "international"}:
+        font_style = "academic"
+    if font_size not in {"small", "medium", "large"}:
+        font_size = "medium"
+    return {
+        "ref_style": ref_style,
+        "two_column": two_column,
+        "font_style": font_style,
+        "font_size": font_size,
+    }
 
 def _render_article_html(article, settings: dict) -> str:
     """渲染论文详情 HTML"""
@@ -334,6 +348,8 @@ def _render_article_html(article, settings: dict) -> str:
         article,
         ref_style=settings["ref_style"],
         two_column=settings.get("two_column", False),
+        font_style=settings.get("font_style", "academic"),
+        font_size=settings.get("font_size", "medium"),
         asset_mode="web",
     )
     if settings.get("two_column"):
@@ -362,13 +378,15 @@ async def page_article(
     article_id: str,
     ref_style: str = Query("elsevier"),
     two_column: bool = Query(False),
+    font_style: str = Query("academic"),
+    font_size: str = Query("medium"),
 ):
     article = _load_article(article_id)
     _render_formulas(article_id)
     article = _load_article(article_id)  # 重新加载（含 SVG 公式）
     article.id = article_id
 
-    settings = _get_settings(ref_style, two_column)
+    settings = _get_settings(ref_style, two_column, font_style, font_size)
 
     return _render_article_html(article, settings)
 
@@ -549,6 +567,7 @@ async def api_preview(
     ref_style: str = Query("elsevier"),
     two_column: bool = Query(False),
     font_size: str = Query("medium"),
+    font_style: str = Query("academic"),
 ):
     """获取 iframe 预览 HTML（使用干净模板，无导航/页脚）"""
     article = _load_article(article_id)
@@ -560,8 +579,9 @@ async def api_preview(
     has_keywords = bool(article.keywords or article.keywords_en)
     has_references = len(article.references) > 0
 
+    settings = _get_settings(ref_style, two_column, font_style, font_size)
     font_map = {"small": "15px", "medium": "17px", "large": "19px"}
-    font_size_css = font_map.get(font_size, "17px")
+    font_size_css = font_map[settings["font_size"]]
 
     template = _jinja_env.get_template("article_preview.html")
     html = template.render(
@@ -569,9 +589,10 @@ async def api_preview(
         has_authors=has_authors,
         has_keywords=has_keywords,
         has_references=has_references,
-        ref_style=ref_style,
-        two_column=two_column,
+        ref_style=settings["ref_style"],
+        two_column=settings["two_column"],
         font_size=font_size_css,
+        font_style=settings["font_style"],
     )
 
     return HTMLResponse(html)
@@ -582,6 +603,8 @@ async def api_download_html(
     article_id: str,
     ref_style: str = Query("elsevier"),
     two_column: bool = Query(False),
+    font_style: str = Query("academic"),
+    font_size: str = Query("medium"),
 ):
     """下载独立 HTML 文件"""
     article = _load_article(article_id)
@@ -589,7 +612,7 @@ async def api_download_html(
     article = _load_article(article_id)
     article.id = article_id
 
-    settings = _get_settings(ref_style, two_column)
+    settings = _get_settings(ref_style, two_column, font_style, font_size)
     html = _render_article_html(article, settings)
 
     # 文件名只保留 ASCII 字符
@@ -607,6 +630,8 @@ async def api_download_pdf(
     article_id: str,
     ref_style: str = Query("elsevier"),
     two_column: bool = Query(False),
+    font_style: str = Query("academic"),
+    font_size: str = Query("medium"),
 ):
     """生成并下载 PDF"""
     article = _load_article(article_id)
@@ -614,7 +639,7 @@ async def api_download_pdf(
     article = _load_article(article_id)
     article.id = article_id
 
-    settings = _get_settings(ref_style, two_column)
+    settings = _get_settings(ref_style, two_column, font_style, font_size)
     html = _render_article_html(article, settings)
 
     try:

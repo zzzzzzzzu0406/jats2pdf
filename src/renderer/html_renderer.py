@@ -93,6 +93,8 @@ class HTMLRenderer:
         self,
         article: Article,
         ref_style: str = "elsevier",
+        font_style: str = "academic",
+        font_size: str = "medium",
         asset_mode: str = "local",
         asset_base: str | None = None,
     ) -> str:
@@ -105,6 +107,8 @@ class HTMLRenderer:
         return self.render_article(
             article,
             ref_style=ref_style,
+            font_style=font_style,
+            font_size=font_size,
             asset_mode=asset_mode,
             asset_base=asset_base,
         )
@@ -116,10 +120,16 @@ class HTMLRenderer:
         article: Article,
         ref_style: str = "elsevier",
         two_column: bool = False,
+        font_style: str = "academic",
+        font_size: str = "medium",
         asset_mode: str = "local",
         asset_base: str | None = None,
     ) -> str:
         """渲染论文详情页"""
+        if font_style not in {"academic", "modern", "international"}:
+            font_style = "academic"
+        if font_size not in {"small", "medium", "large"}:
+            font_size = "medium"
         return self._render_page("article.html", {
             "article": article,
             "has_authors": bool(article.authors),
@@ -129,6 +139,8 @@ class HTMLRenderer:
             "journal_name": article.journal or None,
             "ref_style": ref_style,
             "two_column": two_column,
+            "font_style": font_style,
+            "font_size": font_size,
             "asset_mode": asset_mode,
             "asset_base": asset_base,
             "allow_remote_assets": False,

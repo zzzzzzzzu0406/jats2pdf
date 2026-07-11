@@ -143,8 +143,30 @@ class TestHTMLRenderer:
         assert '<fieldset class="settings-panel">' in html
         assert 'id="upload-status" class="upload-status" role="status" aria-live="polite"' in html
         assert 'id="btn-convert" disabled' in html
+        assert 'id="setting-font-style"' in html
+        assert "学术宋体" in html and "现代无衬线" in html and "国际期刊" in html
+        assert "参考文献格式" in html
         assert "return selectUploadFile(file);" in html
         assert "currentFile = file;\n  handleConvert();" not in html
+
+    def test_font_style_and_size_are_rendered_as_safe_classes(self):
+        article = JATSParser(SAMPLE_PATH).parse()
+        html = HTMLRenderer().render(
+            article,
+            font_style="modern",
+            font_size="large",
+        )
+        assert "font-style-modern font-size-large" in html
+        assert 'id="article-font-style"' in html
+        assert "font_style=international" in html
+
+        fallback = HTMLRenderer().render(
+            article,
+            font_style="not-a-style",
+            font_size="99px",
+        )
+        assert "font-style-academic font-size-medium" in fallback
+        assert "not-a-style" not in fallback
 
 
 if __name__ == "__main__":

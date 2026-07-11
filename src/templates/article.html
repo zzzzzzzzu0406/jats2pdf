@@ -38,7 +38,7 @@
 
     <!-- 操作按钮 -->
     <div style="margin-top:var(--space-lg);display:flex;flex-direction:column;gap:var(--space-sm)">
-      <button class="btn btn-primary" onclick="downloadArticlePDF('{{ article.id }}', '{{ ref_style }}', {{ 'true' if two_column else 'false' }})" style="width:100%;justify-content:center">🖨️ 下载 PDF</button>
+      <button class="btn btn-primary" onclick="downloadArticlePDF('{{ article.id }}', '{{ ref_style }}', {{ 'true' if two_column else 'false' }}, '{{ font_style }}', '{{ font_size }}')" style="width:100%;justify-content:center">🖨️ 下载 PDF</button>
       <button class="btn btn-outline" onclick="copyCitation()" style="width:100%;justify-content:center;font-size:var(--text-2xs)">📋 引用本文</button>
       {% if article.doi %}
       <a href="https://doi.org/{{ article.doi }}" target="_blank" class="btn btn-outline" style="width:100%;justify-content:center;font-size:var(--text-2xs);text-decoration:none">🔗 DOI</a>
@@ -46,22 +46,38 @@
       <div style="border-top:1px solid var(--color-border);padding-top:var(--space-sm);margin-top:var(--space-xs)">
         <span style="font-size:var(--text-2xs);color:var(--color-text-light);display:block;margin-bottom:4px">引用格式</span>
         <div style="display:flex;gap:4px">
-          <a href="?ref_style=elsevier{% if two_column %}&two_column=1{% endif %}" class="btn btn-outline" style="flex:1;justify-content:center;font-size:var(--text-2xs);text-decoration:none;{% if ref_style == 'elsevier' %}background:var(--color-accent);color:#fff{% endif %}">Elsevier</a>
-          <a href="?ref_style=gbt7714{% if two_column %}&two_column=1{% endif %}" class="btn btn-outline" style="flex:1;justify-content:center;font-size:var(--text-2xs);text-decoration:none;{% if ref_style == 'gbt7714' %}background:var(--color-accent);color:#fff{% endif %}">GB/T 7714</a>
+          <a href="?ref_style=elsevier&two_column={{ 'true' if two_column else 'false' }}&font_style={{ font_style }}&font_size={{ font_size }}" class="btn btn-outline" style="flex:1;justify-content:center;font-size:var(--text-2xs);text-decoration:none;{% if ref_style == 'elsevier' %}background:var(--color-accent);color:#fff{% endif %}">Elsevier</a>
+          <a href="?ref_style=gbt7714&two_column={{ 'true' if two_column else 'false' }}&font_style={{ font_style }}&font_size={{ font_size }}" class="btn btn-outline" style="flex:1;justify-content:center;font-size:var(--text-2xs);text-decoration:none;{% if ref_style == 'gbt7714' %}background:var(--color-accent);color:#fff{% endif %}">GB/T 7714</a>
         </div>
       </div>
       <div style="margin-top:var(--space-xs)">
         <span style="font-size:var(--text-2xs);color:var(--color-text-light);display:block;margin-bottom:4px">排版栏数</span>
         <div style="display:flex;gap:4px">
-          <a href="?ref_style={{ ref_style }}{% if not two_column %}&two_column=0{% endif %}" class="btn btn-outline" style="flex:1;justify-content:center;font-size:var(--text-2xs);text-decoration:none;{% if not two_column %}background:var(--color-accent);color:#fff{% endif %}">单栏</a>
-          <a href="?ref_style={{ ref_style }}&two_column=1" class="btn btn-outline" style="flex:1;justify-content:center;font-size:var(--text-2xs);text-decoration:none;{% if two_column %}background:var(--color-accent);color:#fff{% endif %}">双栏</a>
+          <a href="?ref_style={{ ref_style }}&two_column=false&font_style={{ font_style }}&font_size={{ font_size }}" class="btn btn-outline" style="flex:1;justify-content:center;font-size:var(--text-2xs);text-decoration:none;{% if not two_column %}background:var(--color-accent);color:#fff{% endif %}">单栏</a>
+          <a href="?ref_style={{ ref_style }}&two_column=true&font_style={{ font_style }}&font_size={{ font_size }}" class="btn btn-outline" style="flex:1;justify-content:center;font-size:var(--text-2xs);text-decoration:none;{% if two_column %}background:var(--color-accent);color:#fff{% endif %}">双栏</a>
         </div>
+      </div>
+      <div style="margin-top:var(--space-xs)">
+        <label for="article-font-style" style="font-size:var(--text-2xs);color:var(--color-text-light);display:block;margin-bottom:4px">字体风格</label>
+        <select id="article-font-style" class="article-style-select" onchange="window.location.href=this.value">
+          <option value="?ref_style={{ ref_style }}&two_column={{ 'true' if two_column else 'false' }}&font_style=academic&font_size={{ font_size }}"{% if font_style == 'academic' %} selected{% endif %}>学术宋体</option>
+          <option value="?ref_style={{ ref_style }}&two_column={{ 'true' if two_column else 'false' }}&font_style=modern&font_size={{ font_size }}"{% if font_style == 'modern' %} selected{% endif %}>现代无衬线</option>
+          <option value="?ref_style={{ ref_style }}&two_column={{ 'true' if two_column else 'false' }}&font_style=international&font_size={{ font_size }}"{% if font_style == 'international' %} selected{% endif %}>国际期刊</option>
+        </select>
+      </div>
+      <div style="margin-top:var(--space-xs)">
+        <label for="article-font-size" style="font-size:var(--text-2xs);color:var(--color-text-light);display:block;margin-bottom:4px">正文字号</label>
+        <select id="article-font-size" class="article-style-select" onchange="window.location.href=this.value">
+          <option value="?ref_style={{ ref_style }}&two_column={{ 'true' if two_column else 'false' }}&font_style={{ font_style }}&font_size=small"{% if font_size == 'small' %} selected{% endif %}>小号</option>
+          <option value="?ref_style={{ ref_style }}&two_column={{ 'true' if two_column else 'false' }}&font_style={{ font_style }}&font_size=medium"{% if font_size == 'medium' %} selected{% endif %}>中号</option>
+          <option value="?ref_style={{ ref_style }}&two_column={{ 'true' if two_column else 'false' }}&font_style={{ font_style }}&font_size=large"{% if font_size == 'large' %} selected{% endif %}>大号</option>
+        </select>
       </div>
     </div>
   </aside>
 
   <!-- 正文区（双栏 multicol 容器；图表/公式/摘要等跨栏元素须为本容器直接子元素） -->
-  <main class="layout-main article-content">
+  <main class="layout-main article-content font-style-{{ font_style }} font-size-{{ font_size }}">
 
     <header class="article-header">
       {% if article.journal %}

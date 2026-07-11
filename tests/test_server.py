@@ -18,6 +18,21 @@ MINIMAL_XML = b"""<article><front><article-meta><title-group>
 </title-group></article-meta></front><body/></article>"""
 
 
+def test_render_settings_normalize_font_options():
+    settings = server._get_settings(
+        "gbt7714", True, font_style="modern", font_size="large"
+    )
+    assert settings == {
+        "ref_style": "gbt7714",
+        "two_column": True,
+        "font_style": "modern",
+        "font_size": "large",
+    }
+    fallback = server._get_settings(font_style="unsafe class", font_size="99px")
+    assert fallback["font_style"] == "academic"
+    assert fallback["font_size"] == "medium"
+
+
 def test_upload_accepts_uppercase_extension_and_records_size(tmp_path, monkeypatch):
     store = ArticleStore(
         db_path=str(tmp_path / "articles.db"),

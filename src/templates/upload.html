@@ -47,6 +47,14 @@
         </div>
       </div>
       <div class="settings-group">
+        <label class="settings-label" for="setting-font-style">字体风格</label>
+        <select id="setting-font-style">
+          <option value="academic" selected>学术宋体</option>
+          <option value="modern">现代无衬线</option>
+          <option value="international">国际期刊</option>
+        </select>
+      </div>
+      <div class="settings-group">
         <label class="settings-label" for="setting-font-size">正文字号</label>
         <select id="setting-font-size">
           <option value="small">小号 (15px)</option>
@@ -55,10 +63,10 @@
         </select>
       </div>
       <div class="settings-group">
-        <label class="settings-label" for="setting-ref-style">期刊风格</label>
+        <label class="settings-label" for="setting-ref-style">参考文献格式</label>
         <select id="setting-ref-style">
-          <option value="elsevier" selected>Elsevier 风格</option>
-          <option value="gbt7714">GB/T 7714 风格</option>
+          <option value="elsevier" selected>Elsevier</option>
+          <option value="gbt7714">GB/T 7714</option>
         </select>
       </div>
     </fieldset>
@@ -172,10 +180,12 @@ function clearSelectedFile() {
 // 获取当前设置
 function getSettings() {
   var columns = document.querySelector('input[name="columns"]:checked');
+  var fontStyle = document.getElementById('setting-font-style');
   var fontSize = document.getElementById('setting-font-size');
   var refStyle = document.getElementById('setting-ref-style');
   return {
     two_column: columns ? columns.value === 'double' : false,
+    font_style: fontStyle ? fontStyle.value : 'academic',
     font_size: fontSize ? fontSize.value : 'medium',
     ref_style: refStyle ? refStyle.value : 'elsevier'
   };
@@ -277,7 +287,8 @@ function handlePreview() {
   var params = new URLSearchParams({
     ref_style: settings.ref_style,
     two_column: settings.two_column,
-    font_size: settings.font_size
+    font_size: settings.font_size,
+    font_style: settings.font_style
   });
 
   var requestId = ++previewRequestId;
@@ -327,7 +338,9 @@ function handleDownload(format) {
   var settings = getSettings();
   var params = new URLSearchParams({
     ref_style: settings.ref_style,
-    two_column: settings.two_column
+    two_column: settings.two_column,
+    font_size: settings.font_size,
+    font_style: settings.font_style
   });
 
   var url = '/api/articles/' + currentArticleId + '/' + format + '?' + params.toString();
@@ -355,7 +368,7 @@ document.getElementById('btn-preview').addEventListener('click', handlePreview);
 document.getElementById('btn-download-html').addEventListener('click', function() { handleDownload('html'); });
 document.getElementById('btn-download-pdf').addEventListener('click', function() { handleDownload('pdf'); });
 document.getElementById('btn-remove-file').addEventListener('click', clearSelectedFile);
-document.querySelectorAll('#upload-form input[name="columns"], #setting-font-size, #setting-ref-style').forEach(function(control) {
+document.querySelectorAll('#upload-form input[name="columns"], #setting-font-style, #setting-font-size, #setting-ref-style').forEach(function(control) {
   control.addEventListener('change', onSettingsChange);
 });
 
