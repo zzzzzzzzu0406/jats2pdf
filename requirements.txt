@@ -7,25 +7,17 @@
 weasyprint>=60.0          # HTML → PDF 渲染引擎
 jinja2>=3.1.0             # HTML 模板引擎
 lxml>=5.0.0               # JATS XML 解析
+Pillow>=10.0.0            # PDF 图片方向修正、缩放与格式标准化
 
 # ── 公式处理 ──
-# 方案A（推荐）: mathjax-node-cli — 需要安装 Node.js
-#   npm install -g mathjax-node-cli
-# 方案B: 直接在HTML中用MathJax CDN（无需安装，但WeasyPrint兼容性较差）
-# 方案C: KaTeX CLI — 速度更快但MathML支持不如MathJax
-#   npm install -g katex
-
-# ── 参考文献 ──
-bibtexparser>=1.4.0       # BibTeX 解析（可选）
+# 需要 Node.js + mathjax-node（非 Python 包）
+#   npm install --prefix ~/mjnode mathjax-node@2.1.1
+# 或通过 JATS2PDF_MJDIR 指定其他安装目录
 
 # ── Web 服务 ──
 fastapi>=0.110.0          # Web 框架
 uvicorn[standard]>=0.29.0 # ASGI 服务器
 python-multipart>=0.0.9   # 文件上传支持
-
-# ── 开发工具 ──
-pytest>=8.0.0             # 单元测试
-black>=24.0.0             # 代码格式化
 
 # ── 字体 ──
 # Windows: 系统自带 SimHei(黑体) + SimSun(宋体)

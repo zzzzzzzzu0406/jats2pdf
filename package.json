@@ -1,5 +1,18 @@
 {
-  "dependencies": {
-    "mathjax-node": "^2.1.1"
+  "name": "scholartype-jats2pdf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JATS XML article management, editing, preview and PDF typesetting platform",
+  "scripts": {
+    "web:install": "npm --prefix web/upload ci && npm --prefix web/article ci",
+    "portal:dev": "npm --prefix web/upload run dev",
+    "portal:build": "npm --prefix web/upload run build",
+    "studio:dev": "npm --prefix web/article run dev",
+    "studio:build": "npm --prefix web/article run build",
+    "web:build": "npm run portal:build && npm run studio:build"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
   }
 }

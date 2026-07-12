@@ -33,6 +33,17 @@ export interface FigureItem {
   number: number;
   caption: BiText;
   placeholder: string; // visual description / colour placeholder
+  src?: string; // real backend image URL when available
+  sectionId?: string; // nearest section in the source document
+  order?: number; // source order shared by figures and tables
+}
+
+export interface TableCell {
+  text: string;
+  colspan?: number;
+  rowspan?: number;
+  isHeader?: boolean;
+  align?: string;
 }
 
 export interface TableRow { cells: string[] }
@@ -43,6 +54,11 @@ export interface TableItem {
   caption: BiText;
   headers: string[];
   rows: TableRow[];
+  headerRows?: TableCell[][];
+  bodyRows?: TableCell[][];
+  footnotes?: string[];
+  sectionId?: string;
+  order?: number;
 }
 
 export interface PaperData {

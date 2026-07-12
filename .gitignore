@@ -13,6 +13,9 @@ venv/
 .venv/
 env/
 .env/
+.env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -25,15 +28,19 @@ env/
 Thumbs.db
 
 # Project outputs
-samples/output/*.pdf
+/samples/output/
+/output/
+/output.pdf
+/tmp/
 *.log
+
+# Test caches
+.pytest_cache/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# Environment
-.env
-.env.local
+# Node
 node_modules/
 
 # Server runtime data

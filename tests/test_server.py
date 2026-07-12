@@ -10,6 +10,15 @@ import pytest
 from fastapi import HTTPException, UploadFile
 
 from src import server
+from src.parser.jats_parser import (
+    Article,
+    Figure,
+    Paragraph,
+    Run,
+    Section,
+    Table,
+    TableCell,
+)
 from src.store import ArticleStore
 
 
@@ -146,3 +155,128 @@ def test_zip_bundle_upload_stores_article_images(tmp_path, monkeypatch):
     )
     assert image_response.status_code == 200
     assert image_response.path.endswith("figure.jpg")
+
+
+def test_pdf_images_are_embedded_and_downscaled(tmp_path, monkeypatch):
+    article_id = "abc12345"
+    asset_dir = tmp_path / article_id
+    asset_dir.mkdir(parents=True)
+    image_path = asset_dir / "figure.png"
+
+    from PIL import Image
+
+    Image.new("RGB", (3000, 1200), "white").save(image_path)
+    figure = Figure(id="f1", caption="Figure", graphic_href="figure.png", number=1)
+    section = Section(title="Results", figures=[figure])
+    article = Article(title="Image article", sections=[section])
+
+    monkeypatch.setattr(server, "_ARTICLE_ASSET_DIR", str(tmp_path))
+    embedded = server._embed_article_images(article, article_id)
+
+    assert embedded == 1
+    assert figure.graphic_href.startswith("data:image/jpeg;base64,")
+
+    payload = figure.graphic_href.split(",", 1)[1]
+    decoded = io.BytesIO(__import__("base64").b64decode(payload))
+    with Image.open(decoded) as optimized:
+        assert max(optimized.size) == server._MAX_PDF_IMAGE_EDGE
+
+
+def test_editor_payload_preserves_real_sections_and_images():
+    paragraph = Paragraph(runs=[Run(kind="text", text="Real backend paragraph")])
+    figure = Figure(id="f1", caption="Real figure", graphic_href="figure.jpg", number=1)
+    table = Table(
+        id="t1",
+        caption="Structured table",
+        number=1,
+        header_rows=[[
+            TableCell(text="Group", rowspan=2, is_header=True),
+            TableCell(text="Metrics", colspan=2, is_header=True),
+        ]],
+        body_rows=[[
+            TableCell(text="A", is_header=True),
+            TableCell(text="10", align="right"),
+            TableCell(text="20", align="char"),
+        ]],
+        footnotes=["Table note"],
+    )
+    section = Section(title="Introduction", paragraphs=[paragraph], figures=[figure], tables=[table])
+    article = Article(
+        title="Real article",
+        journal="Test Journal",
+        lang="en",
+        sections=[section],
+    )
+
+    payload = server._article_editor_payload(article, "abc12345")
+
+    assert payload["paper"]["title"]["en"] == "Real article"
+    assert payload["paper"]["sections"][0]["content"]["en"] == "Real backend paragraph"
+    assert payload["paper"]["figures"][0]["src"].startswith(
+        "/api/files/figure.jpg?article_id=abc12345"
+    )
+    assert payload["paper"]["figures"][0]["sectionId"] == "section-1"
+    assert payload["paper"]["figures"][0]["order"] == 1
+    editor_table = payload["paper"]["tables"][0]
+    assert editor_table["sectionId"] == "section-1"
+    assert editor_table["order"] == 2
+    assert editor_table["headerRows"][0][0]["rowspan"] == 2
+    assert editor_table["headerRows"][0][1]["colspan"] == 2
+    assert editor_table["bodyRows"][0][0]["isHeader"] is True
+    assert editor_table["bodyRows"][0][1]["align"] == "right"
+    assert editor_table["footnotes"] == ["Table note"]
+
+
+def test_backend_preview_and_pdf_use_identical_document(tmp_path, monkeypatch):
+    store = ArticleStore(
+        db_path=str(tmp_path / "articles.db"),
+        data_dir=str(tmp_path / "articles"),
+    )
+    store.init_db()
+    article_id = store.add_article(Article(title="Same layout", lang="en"))
+    monkeypatch.setattr(server, "store", store)
+    monkeypatch.setattr(server, "_render_formulas", lambda _: None)
+
+    captured = {}
+
+    def fake_render(self, html_content, base_url=None):
+        captured["html"] = html_content
+        return b"%PDF-1.4\n%%EOF"
+
+    from src.renderer.pdf_renderer import PDFRenderer
+
+    monkeypatch.setattr(PDFRenderer, "render_to_bytes", fake_render)
+    preview = asyncio.run(
+        server.api_preview(
+            article_id,
+            ref_style="gbt7714",
+            two_column=True,
+            font_size="large",
+            font_style="modern",
+        )
+    )
+    asyncio.run(
+        server.api_download_pdf(
+            article_id,
+            ref_style="gbt7714",
+            two_column=True,
+            font_style="modern",
+            font_size="large",
+        )
+    )
+
+    assert captured["html"] == preview.body.decode("utf-8")
+    assert "font-size: 15px" in captured["html"]
+    assert 'class="font-style-modern two-column"' in captured["html"]
+    assert '<div class="article-front">' in captured["html"]
+    assert '<main class="article-main">' in captured["html"]
+    assert "column-gap: 7.5mm" in captured["html"]
+    assert "margin: 18mm 19mm 18mm" in captured["html"]
+    assert "column-span: all" not in captured["html"]
+
+
+def test_pdf_renderer_can_skip_legacy_external_stylesheet():
+    from src.renderer.pdf_renderer import PDFRenderer
+
+    assert PDFRenderer(css_path="").css_path == ""
+    assert PDFRenderer().css_path.endswith("templates/styles.css")

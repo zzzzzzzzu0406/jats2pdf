@@ -1,11 +1,17 @@
+# ScholarType 文章编辑工作台
 
-  # 期刊网页前端设计
+React + Vite 工作台，从 `/api/articles/{id}/editor` 加载真实 JATS 数据，并保留基础信息、摘要、章节、图表和参考文献编辑、中英预览、单双栏、PDF 打印与 Word 导出功能。
 
-  This is a code bundle for 期刊网页前端设计. The original project is available at https://www.figma.com/design/Hx22nIwkmuwv4eVXeGbnGU/%E6%9C%9F%E5%88%8A%E7%BD%91%E9%A1%B5%E5%89%8D%E7%AB%AF%E8%AE%BE%E8%AE%A1.
+正常运行请从仓库根目录构建前端并启动统一服务：
 
-  ## Running the code
+```bash
+npm run web:install
+npm run web:build
+.venv/bin/python -m src.server
+```
 
-  Run `npm i` to install the dependencies.
+门户、工作台和 API 共用 `http://127.0.0.1:8000/`，工作台路径为 `/studio/`。
 
-  Run `npm run dev` to start the development server.
-  
+`npm run studio:dev` 仅用于需要热更新的前端调试，不属于正常启动方式。
+
+当前编辑状态仅保存在浏览器内存中，尚无后端持久化接口。

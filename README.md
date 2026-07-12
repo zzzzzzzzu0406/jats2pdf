@@ -1,129 +1,164 @@
-# JATS2PDF - 学术期刊智能排版引擎
+# ScholarType / JATS2PDF
 
-> 🏆 期刊大赛 · 选题2：基于 JATS XML 结构数据的 PDF 自动排版与生成
+将 JATS XML 论文解析为结构化数据，并在同一个 Web 服务中完成上传、文章库浏览、内容编辑、单双栏预览、HTML/PDF/Word 导出。
 
-## 项目简介
+生产模式下，React 门户、文章编辑工作台和 FastAPI API 共用一个端口：`http://127.0.0.1:8000/`。
 
-将学术期刊的 JATS XML 标准数据自动渲染为排版精美的 PDF 论文。
+## 主要功能
 
-**核心流程：JATS XML → 结构化解析 → Jinja2 模板渲染 → WeasyPrint 生成 PDF**
+- 上传单个 `.xml`，或上传包含一个 JATS XML 与配图的 `.zip` 资源包。
+- 使用 SQLite 保存文章索引，支持搜索、分页和筛选。
+- 解析标题、作者、机构、双语摘要、关键词、章节、图表、公式、交叉引用和参考文献。
+- 门户预览与后端 PDF 使用同一份 `article_preview.html`，减少预览和导出的样式差异。
+- 支持单栏/双栏、Elsevier/GB-T 7714、字体风格和字号切换。
+- 双栏样式参考《计算机学报》：标题/作者/摘要通栏，正文双栏，图表默认栏内排版。
+- PDF 导出前自动嵌入、旋转校正和压缩图片，避免远程图片缺失或超大图片拖慢渲染。
+- 完整文章工作台支持编辑基础信息、摘要、关键词、章节、图表和参考文献，并可切换中英预览、单双栏、PDF 打印和 Word 导出。
 
-## 赛题要求覆盖（选题2）
+> 当前工作台编辑内容保存在浏览器内存中，尚未提供 PUT/PATCH 接口持久化修改。门户的后端 PDF 与工作台的浏览器打印是两条独立导出链路。
 
-| # | 要求 | 实现 |
-|---|------|------|
-| 1 | 标题/作者/摘要/关键词渲染 | 解析 + 模板渲染；**中英双语**（abstract_en/keywords_en）；**机构上标+列表** |
-| 2 | 正文+章节流式排版 | 多级章节嵌套；首行缩进2em、行距1.6、标题层级 pt 字号（@media print） |
-| 3 | 图表自动编号+交叉引用 | 解析层按文档顺序自动编号（图1/表1）；正文 `<xref>` 渲染为可点击链接 |
-| 4 | MathML 高保真渲染 | **mathjax-node 预渲染 MathML→SVG**（块级+行内），WeasyPrint 矢量渲染 |
-| 5 | 参考文献格式化 | Elsevier / **GB-T 7714** 两种格式（`--ref-style`），悬挂缩进2em |
-| 6 | 单/双栏切换 | `--two-column`；摘要/图表/公式/参考文献跨栏（column-span:all） |
-| 7 | 页眉页脚/页码 | `@page` 期刊名 running header + `counter(page)`，首页无页眉 |
+## 系统架构
+
+```text
+JATS XML / ZIP
+      │
+      ▼
+lxml JATSParser ──► Article 数据模型 ──► SQLite / pickle 文章库
+      │                                      │
+      ├──► Jinja2 预览模板 ──► WeasyPrint ──► PDF
+      │                         └─ Chrome headless 回退
+      │
+      └──► FastAPI JSON API ──► React 门户 / React 编辑工作台
+```
 
 ## 环境要求
 
-- **Python 3.10+**（开发用 3.14 `.venv`；WeasyPrint 原生用 conda env 3.12，见下）
-- **Node.js**（公式 MathML→SVG 预渲染用，mathjax-node）
-- 系统中文字体（推荐 Noto Serif/Sans CJK SC；macOS 自带 STHeiti 亦可）
+- Python 3.10+
+- Node.js 20+、npm 10+
+- WeasyPrint 所需的 Pango/Cairo 等系统库
+- 推荐安装 Noto Serif/Sans CJK 中文字体
 
-### PDF 引擎（自动二选一）
+WeasyPrint 无法加载时，`PDFRenderer` 会尝试使用 Chrome、Edge、Brave 或 Chromium 的 headless 模式生成 PDF。
 
-`src/renderer/pdf_renderer.py` 自动选择：
-
-1. **WeasyPrint（首选，原生 CSS Paged Media）** — 支持 `@page` 页眉页码、`column-count` 双栏、`page-break`。
-   WeasyPrint 需系统 GTK 库（pango/cairo）。**macOS 上若无法装 Homebrew**（如网络受限），
-   可用 conda-forge 自带 GTK 的 weasyprint，**无需 brew、无需 sudo**：
-   ```bash
-   # 装 miniconda（用户目录，无 sudo）后：
-   conda create -y -n jats2pdf --override-channels -c conda-forge python=3.12 weasyprint pango lxml jinja2 pytest
-   conda activate jats2pdf
-   ```
-2. **Chrome headless（回退）** — WeasyPrint 不可用时自动用系统 Chrome/Edge 打印 PDF。
-   零额外安装，但不支持 `@page` 页眉（页码仍可，期刊名 running header 丢失）。
-
-### 公式预渲染（mathjax-node）
-
-WeasyPrint 不执行 JS、不渲染 MathML，故公式需预渲染为 SVG。依赖 mathjax-node：
-```bash
-# ⚠ mathjax-node 对含非 ASCII 的安装路径有 bug，须装在无中文路径下：
-mkdir -p ~/mjnode && cd ~/mjnode && npm install mathjax-node
-# 辅助脚本 mathml2svg.js 由 formula_renderer.py 自举生成
-```
-未安装时自动降级为原样 MathML（PDF 中公式会退化为文本，建议安装）。
-
-## 快速开始
+## 安装与运行
 
 ```bash
-# 用 conda env（WeasyPrint 原生）跑示例：
-conda activate jats2pdf
-python -m src.main samples/sample1.xml -o samples/output/sample1.pdf
+# Python
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 
-# 双栏 + GB/T 7714 参考文献：
-python -m src.main samples/sample1.xml --two-column --ref-style gbt7714 -o out.pdf
+# 前端
+npm run web:install
+npm run web:build
 
-# 只看中间 HTML（调试）：
-python -m src.main samples/sample1.xml --html --html-output debug.html
-
-# 生成多页面平台静态站点（首页/浏览/详情/上传/关于）：
-python build_site.py
+# 启动统一服务
+python -m src.server
 ```
 
-### CLI 参数
+打开：
 
-| 参数 | 说明 |
-|------|------|
-| `input` | 输入 JATS XML 路径 |
-| `-o/--output` | 输出 PDF 路径 |
-| `--html` / `--html-output` | 只生成中间 HTML（调试） |
-| `--two-column` | 启用双栏排版 |
-| `--ref-style {elsevier,gbt7714}` | 参考文献格式（默认 elsevier） |
-| `--no-render-formulas` | 关闭公式 MathML→SVG 预渲染（默认开启） |
-| `--css` | 自定义 CSS 样式表 |
+- 门户与文章库：http://127.0.0.1:8000/
+- 文章编辑工作台：http://127.0.0.1:8000/studio/
+- 健康检查：http://127.0.0.1:8000/api/health
+
+### 单端口运行说明
+
+项目的默认运行方式只有一个端口：
+
+```bash
+npm run web:build
+.venv/bin/python -m src.server
+```
+
+门户、文章库、编辑工作台和全部 API 均由 `http://127.0.0.1:8000/` 提供；页面之间通过顶部导航切换，不需要分别启动两个前端服务。
+
+`npm run portal:dev` 和 `npm run studio:dev` 仅用于前端开发人员临时启用 Vite 热更新，会占用 `5173/5174`，不属于项目的正常启动或交付方式。
+
+## 公式渲染
+
+WeasyPrint 不执行 JavaScript，也不会直接高保真渲染 MathML。项目可通过 `mathjax-node` 将 MathML/LaTeX 预渲染为 SVG：
+
+```bash
+mkdir -p ~/mjnode
+npm install --prefix ~/mjnode mathjax-node@2.1.1
+```
+
+也可以用 `JATS2PDF_MJDIR` 指定安装目录。未安装时，公式会回退为原始 MathML/文本。
+
+## 命令行使用
+
+```bash
+# 默认 PDF
+.venv/bin/python -m src.main samples/sample1.xml -o output.pdf
+
+# 双栏 + GB/T 7714
+.venv/bin/python -m src.main samples/sample1.xml \
+  --two-column \
+  --ref-style gbt7714 \
+  -o output.pdf
+
+# 仅生成中间 HTML
+.venv/bin/python -m src.main samples/sample1.xml \
+  --html \
+  --html-output debug.html
+
+# 不执行公式预渲染
+.venv/bin/python -m src.main samples/sample1.xml \
+  --no-render-formulas \
+  -o output.pdf
+```
+
+## 常用 API
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/upload` | 上传 JATS XML 或 XML+图片 ZIP |
+| `GET` | `/api/articles` | 文章列表、搜索、分页和筛选 |
+| `GET` | `/api/articles/{id}/editor` | 编辑器结构化数据 |
+| `GET` | `/api/articles/{id}/preview` | 自包含 HTML 预览 |
+| `GET` | `/api/articles/{id}/html` | 下载 HTML |
+| `GET` | `/api/articles/{id}/pdf` | 生成并下载后端 PDF |
+| `GET` | `/api/filters` | 可用筛选项 |
+| `GET` | `/api/health` | 服务状态 |
 
 ## 项目结构
 
-```
+```text
 .
 ├── src/
-│   ├── parser/jats_parser.py        # JATS XML 解析 + 数据模型(含 xref/编号/双语/机构)
-│   ├── renderer/
-│   │   ├── html_renderer.py         # Jinja2 → HTML（多页面）
-│   │   ├── pdf_renderer.py          # WeasyPrint → PDF（自动回退 Chrome headless）
-│   │   └── formula_renderer.py      # MathML/LaTeX → SVG（mathjax-node）
-│   ├── templates/
-│   │   ├── article.html             # 论文详情模板（xref/扁平化跨栏/双语/机构/Elsevier·GB-T7714）
-│   │   ├── base.html / *.html       # 平台页面模板
-│   │   └── styles.css               # 打印排版样式（@page/@media print/.two-column）
-│   └── main.py                      # CLI 入口
-├── assets/css/platform.css, assets/js/platform.js   # web 平台样式/脚本
-├── samples/sample1.xml              # 示例 JATS（含双语/机构/fig/xref/inline-formula）
-├── build_site.py                    # 静态站点构建
-├── tests/                           # 单元测试（15 项）
-├── docs/                            # 设计规范、项目说明
-└── requirements.txt
+│   ├── parser/jats_parser.py       # JATS 解析与数据模型
+│   ├── renderer/                   # HTML、PDF、公式渲染
+│   ├── templates/                  # CLI、预览与回退页面模板
+│   ├── server.py                   # FastAPI 页面与 API
+│   └── store.py                    # SQLite / pickle 文章存储
+├── web/
+│   ├── upload/                     # React 上传门户与文章库
+│   └── article/                    # React 文章编辑工作台
+├── assets/                         # Jinja 回退页面静态资源
+├── samples/                        # 示例与真实 JATS XML
+├── tests/                          # Python 单元与集成测试
+├── build_site.py                   # 可选的旧版静态站构建器
+├── requirements.txt               # Python 运行依赖
+├── requirements-dev.txt           # 测试与格式化工具
+└── 技术栈.md                       # 架构和技术选型详情
 ```
 
-## 运行测试
+`data/` 保存真实文章库和上传图片，属于运行数据，不应作为缓存删除。`dist/`、`samples/output/`、`tmp/`、`output/` 等生成目录已加入 `.gitignore`。
+
+## 测试与验证
 
 ```bash
-pytest tests/ -v     # 15 项，含公式 SVG 集成测试
+python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest tests/ -q
+npm run web:build
 ```
+
+当前共 38 项测试，覆盖 JATS 解析、模板渲染、公式处理、文章存储、上传限制、ZIP 图片、PMC 图片回退、PDF 图片嵌入，以及预览/PDF 共用文档等关键路径。
 
 ## 技术栈
 
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| XML 解析 | lxml | XPath 查询，高性能 XML 处理 |
-| 模板引擎 | Jinja2 | HTML 模板渲染（含宏：自动编号/交叉引用/参考文献格式） |
-| PDF 生成 | WeasyPrint | HTML+CSS Paged Media → PDF（回退 Chrome headless） |
-| 公式渲染 | mathjax-node | MathML/LaTeX → SVG 矢量预渲染 |
-| 测试 | pytest | 单元 + 集成测试 |
-
-## 已知限制
-
-- **WeasyPrint `column-span:all` 仅对 multicol 容器直接子元素生效**：故模板把图/表/公式
-  从 `<section>` 内「扁平化」提升为 `.layout-main` 直接子元素，双栏下才能正确跨栏。
-- WeasyPrint 不渲染 MathML（须 mathjax-node 预渲染 SVG）；不支持 `box-shadow`/CSS 变量部分场景（仅影响 web 外观，不影响 PDF 排版）。
+详见 [技术栈.md](./技术栈.md)。
 
 ## 团队
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{{ 'en' if article.lang == 'en' else 'zh-CN' }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -34,62 +34,87 @@ body.font-style-international {
 body {
   font-family: var(--font-body);
   font-size: {{ font_size or '16px' }};
-  line-height: 1.8;
+  line-height: 1.62;
   color: var(--color-text);
   background: var(--color-bg);
-  padding: 24px 28px;
-  max-width: 900px;
+  width: 210mm;
+  max-width: 100%;
+  min-height: 297mm;
+  padding: 18mm 19mm;
   margin: 0 auto;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
 }
 
+.issue-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14mm;
+  padding-bottom: 2.5mm;
+  border-bottom: 1.2px solid #111;
+  box-shadow: 0 1.8px 0 -1px #111;
+  font-family: var(--font-heading);
+  font-size: 0.88em;
+  letter-spacing: 0.04em;
+}
+.issue-header strong { font-size: 1.05em; letter-spacing: 0.22em; text-align: center; }
+.issue-header span:last-child { text-align: right; }
+
 /* ── 文章头部 ── */
-.journal-name { font-style: italic; color: var(--color-text-sub); font-size: 0.9em; margin-bottom: 8px; }
-.article-title { font-family: var(--font-heading); font-size: 1.6em; font-weight: 700; margin-bottom: 12px; line-height: 1.4; }
-.article-subtitle { font-size: 1.1em; color: var(--color-text-sub); margin-bottom: 10px; }
-.authors { font-size: 0.95em; margin-bottom: 8px; }
+.journal-name { display: none; }
+.article-header { text-align: center; }
+.article-title { font-family: var(--font-heading); font-size: 2.05em; font-weight: 700; margin: 0 auto 7mm; line-height: 1.35; max-width: 92%; }
+html[lang="zh-CN"] .article-title { max-width: 82%; font-size: 2em; letter-spacing: 0.015em; text-wrap: balance; }
+.article-subtitle { font-size: 1.08em; color: var(--color-text-sub); margin-bottom: 5mm; }
+.authors { font-size: 1.05em; margin-bottom: 3mm; letter-spacing: 0.04em; }
 .author sup { color: var(--color-accent); font-size: 0.75em; }
 .author-email { font-size: 0.8em; color: var(--color-text-sub); margin-left: 4px; }
 .orcid { font-size: 0.7em; color: var(--color-accent); text-decoration: none; }
-.affiliations { font-size: 0.85em; color: var(--color-text-sub); margin-bottom: 10px; }
+.affiliations { font-size: 0.82em; color: var(--color-text-sub); margin-bottom: 3mm; text-align: center; }
 .affiliation { margin-bottom: 2px; }
-.article-meta { font-size: 0.8em; color: var(--color-text-sub); margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+.article-meta { font-size: 0.78em; color: var(--color-text-sub); margin-bottom: 5mm; }
 
 /* ── 摘要 ── */
-.abstract { border-left: 3px solid var(--color-accent); padding: 10px 16px; margin: 16px 0; background: #f8f9fa; }
-.abstract h2 { font-size: 1em; font-weight: 700; margin-bottom: 6px; color: var(--color-accent); }
-.abstract p { text-indent: 0; }
-.abstract-en { border-left-color: #666; }
+.abstract { padding: 0; margin: 4mm 0 2.5mm; background: transparent; text-align: justify; font-size: 0.92em; line-height: 1.68; }
+.abstract h2 { float: left; font-size: 1em; font-weight: 700; margin: 0 0.9em 0 0; color: #111; letter-spacing: 0.16em; }
+.abstract p { text-indent: 0; text-justify: inter-word; overflow-wrap: break-word; }
+.abstract p::after { content: ""; display: block; clear: both; }
+.abstract-en { margin-top: 3mm; }
+.abstract-en h2 { letter-spacing: 0; }
 
 /* ── 关键词 ── */
-.keywords { font-size: 0.85em; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); }
+.keywords { font-size: 0.88em; margin-bottom: 2.5mm; padding: 0; border: 0; line-height: 1.55; }
 .keywords strong { margin-right: 8px; }
-.keywords-en { margin-top: -16px; }
+.keywords-en { margin-top: 0; }
 
 /* ── 章节 ── */
-.section { margin: 20px 0; }
-.section-title { font-family: var(--font-heading); font-weight: 700; margin-bottom: 10px; }
-.level-1 > .section-title { font-size: 1.2em; margin-top: 24px; }
-.level-2 > .section-title { font-size: 1.1em; }
-.level-3 > .section-title { font-size: 1.05em; }
+.section { margin: 0; }
+.section-title { font-family: var(--font-heading); font-weight: 700; margin: 1.15em 0 0.42em; line-height: 1.35; break-after: avoid; }
+.level-1 > .section-title { font-size: 1.25em; margin-top: 1.35em; }
+.level-2 > .section-title { font-size: 1.12em; }
+.level-3 > .section-title { font-size: 1.04em; }
 .level-4 > .section-title,
 .level-5 > .section-title,
 .level-6 > .section-title { font-size: 1em; }
-.article-paragraph { text-indent: 2em; margin-bottom: 8px; }
+.article-paragraph { text-indent: 2em; margin: 0 0 0.34em; text-align: justify; text-justify: inter-word; overflow-wrap: break-word; orphans: 3; widows: 3; }
 
 /* ── 图表 ── */
-.figure { text-align: center; margin: 20px 0; padding: 12px; border: 1px solid var(--color-border); border-radius: 4px; }
-.figure img { max-width: 100%; height: auto; }
+.figure { text-align: center; margin: 4mm 0; padding: 0; border: 0; border-radius: 0; break-inside: avoid; }
+.figure img { display: block; width: auto; max-width: 100%; max-height: 220mm; height: auto; object-fit: contain; margin: 0 auto; }
 .fig-label, .tbl-label { font-weight: 700; }
-.figure figcaption, .table-caption { font-size: 0.85em; color: var(--color-text-sub); margin-top: 6px; }
+.figure figcaption, .table-caption { font-size: 0.82em; color: #222; margin-top: 1.5mm; text-align: center; line-height: 1.45; }
 
-.table-wrap { margin: 20px 0; max-width: 100%; }
-.table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--color-border); border-radius: 4px; }
+.table-wrap { margin: 4mm 0; max-width: 100%; break-inside: avoid; }
+.table-scroll { max-width: 100%; overflow: visible; border: 0; border-radius: 0; }
 .table-scroll:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.data-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 0.85em; }
-.data-table th, .data-table td { border: 1px solid var(--color-border); padding: 6px 10px; text-align: left; vertical-align: top; }
+.data-table { width: 100%; min-width: 0; border-collapse: collapse; border-top: 1.2px solid #111; border-bottom: 1.2px solid #111; font-size: 0.8em; }
+.data-table th, .data-table td { border: 0; border-bottom: 0.45px solid #aaa; padding: 1.2mm 1.6mm; text-align: left; vertical-align: top; }
 .data-table th { vertical-align: middle; }
-.data-table thead { background: #f1f4f6; }
-.data-table tbody th { background: #f7f8f9; }
+.data-table thead { background: transparent; border-bottom: 0.8px solid #111; }
+.data-table tbody th { background: transparent; }
+.data-table tbody tr:last-child > * { border-bottom: 0; }
 .data-table .cell-align-center { text-align: center; }
 .data-table .cell-align-right, .data-table .cell-align-char { text-align: right; font-variant-numeric: tabular-nums; }
 .data-table .cell-align-left { text-align: left; }
@@ -97,7 +122,7 @@ body {
 .table-notes p { margin: 3px 0; text-indent: 0; }
 
 /* ── 公式 ── */
-.formula-wrap { text-align: center; margin: 20px 0; padding: 8px; }
+.formula-wrap { text-align: center; margin: 3.5mm 0; padding: 0; break-inside: avoid; }
 .formula-wrap svg { max-width: 100%; height: auto; }
 .formula-label { text-align: right; font-size: 0.85em; color: var(--color-text-sub); }
 .inline-formula svg { vertical-align: middle; max-height: 1.4em; display: inline-block; }
@@ -108,25 +133,43 @@ body {
 .xref:hover { text-decoration: underline; }
 
 /* ── 参考文献 ── */
-.references { margin-top: 30px; padding-top: 20px; border-top: 2px solid var(--color-border); }
-.references h2 { font-size: 1.2em; margin-bottom: 16px; }
-.reference-item { font-size: 0.85em; margin-bottom: 8px; padding-left: 8px; text-indent: -8px; }
+.references { margin-top: 1.4em; padding-top: 0; border: 0; }
+.references h2 { font-family: var(--font-heading); font-size: 1.2em; margin-bottom: 0.7em; }
+.reference-item { list-style: none; counter-increment: reference; font-size: 0.78em; line-height: 1.48; margin-bottom: 0.45em; padding-left: 2.2em; text-indent: -2.2em; text-align: justify; text-justify: inter-word; overflow-wrap: anywhere; }
+.reference-item::before { content: "[" counter(reference) "] "; color: #111; font-style: normal; }
 .ref-doi { color: var(--color-accent); font-size: 0.85em; }
-.references ol { padding-left: 24px; }
+.references ol { padding-left: 0; counter-reset: reference; }
 
 /* ── 双栏 ── */
-body.two-column .article-body { column-count: 2; column-gap: 24px; }
-body.two-column .abstract,
-body.two-column .figure,
-body.two-column .table-wrap,
-body.two-column .formula-wrap,
-body.two-column .references { column-span: all; }
+body.two-column .article-main {
+  column-count: 2;
+  column-gap: 7.5mm;
+  column-fill: balance;
+  column-rule: none;
+  margin-top: 7mm;
+}
 
 /* ── 打印 ── */
 @media print {
-  body { padding: 0; font-size: 10pt; }
+  @page {
+    size: A4;
+    margin: 18mm 19mm 18mm;
+    @top-left { content: ""; border-bottom: 0.5pt solid #111; }
+    @top-center { content: "{{ article.journal or '学术期刊' }}"; border-bottom: 0.5pt solid #111; font-family: var(--font-heading); font-size: 8.5pt; letter-spacing: 0.2em; }
+    @top-right { content: counter(page); border-bottom: 0.5pt solid #111; font-family: var(--font-body); font-size: 8.5pt; }
+  }
+  @page:first {
+    @top-left { content: none; border: 0; }
+    @top-center { content: none; border: 0; }
+    @top-right { content: none; border: 0; }
+  }
+  html, body { width: auto; min-height: 0; }
+  body { max-width: none; padding: 0; margin: 0; }
   .table-scroll { overflow: visible; border: 0; }
   .data-table { min-width: 0; }
+  .figure, .table-wrap, .formula-wrap { break-inside: avoid; }
+  .section-title { break-after: avoid; }
+  body.two-column .article-main { column-fill: auto; }
 }
 </style>
 </head>
@@ -134,8 +177,15 @@ body.two-column .references { column-span: all; }
 
 <div class="article-body">
 
+  <div class="article-front">
+  <div class="issue-header">
+    <span>{{ article.publication_year or "Online" }}</span>
+    <strong>{{ article.journal or "学 术 期 刊" }}</strong>
+    <span>Online</span>
+  </div>
+
   <!-- 文章头部 -->
-  <header>
+  <header class="article-header">
     {% if article.journal %}
     <div class="journal-name">{{ article.journal }}</div>
     {% endif %}
@@ -148,10 +198,18 @@ body.two-column .references { column-span: all; }
     <div class="authors">
       {% for author in article.authors %}
       <span class="author">
-        {{ author.surname }}{{ author.given_name }}
+        {% if article.lang == 'en' %}{{ author.given_name }} {{ author.surname }}{% else %}{{ author.surname }}{{ author.given_name }}{% endif %}
         {% if author.affiliation %}<sup>{{ author.affiliation }}</sup>{% endif %}
         {% if not loop.last %}, {% endif %}
       </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if article.affiliations %}
+    <div class="affiliations">
+      {% for affiliation in article.affiliations %}
+      <div class="affiliation"><sup>{{ loop.index }}</sup> {{ affiliation.department }}{% if affiliation.department and affiliation.name %}, {% endif %}{{ affiliation.name }}{% if affiliation.city %}, {{ affiliation.city }}{% endif %}{% if affiliation.country %}, {{ affiliation.country }}{% endif %}</div>
       {% endfor %}
     </div>
     {% endif %}
@@ -176,11 +234,17 @@ body.two-column .references { column-span: all; }
   {% endif %}
 
   <!-- 关键词 -->
-  {% if has_keywords %}
+  {% if article.keywords %}
   <section class="keywords">
     <strong>{% if article.lang == 'en' %}Keywords:{% else %}关键词：{% endif %}</strong>{{ article.keywords | join("；") }}
   </section>
   {% endif %}
+  {% if article.keywords_en %}
+  <section class="keywords keywords-en">
+    <strong>Key words:</strong>{{ article.keywords_en | join("; ") }}
+  </section>
+  {% endif %}
+  </div><!-- .article-front -->
 
   {# ── 行内公式宏 ── #}
   {% macro inline_fm(fm) -%}
@@ -254,6 +318,8 @@ body.two-column .references { column-span: all; }
   {% endif %}
   {% endmacro %}
 
+  <main class="article-main">
+
   {% if article.blocks is defined and article.blocks %}
     {% set root_no = namespace(value=0) %}
     {% for block in article.blocks %}
@@ -281,6 +347,8 @@ body.two-column .references { column-span: all; }
     </ol>
   </section>
   {% endif %}
+
+  </main><!-- .article-main -->
 
 </div><!-- .article-body -->
 

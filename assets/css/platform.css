@@ -657,7 +657,7 @@ body{
 /* 行内公式 SVG */
 .article-content .inline-formula svg{height:1em;vertical-align:-0.2em}
 /* 图片自适应 */
-.article-content .figure img{max-width:100%;height:auto;border-radius:var(--radius-sm);margin:0 auto;display:block}
+.article-content .figure img{width:auto;max-width:100%;max-height:720px;height:auto;object-fit:contain;image-orientation:from-image;border-radius:var(--radius-sm);margin:0 auto;display:block}
 .article-content .references{
   margin-top:var(--space-2xl);padding-top:var(--space-lg);
   border-top:2px solid var(--color-border);

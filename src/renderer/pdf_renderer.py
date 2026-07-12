@@ -142,9 +142,10 @@ class PDFRenderer:
     def __init__(self, css_path: Optional[str] = None):
         """
         Args:
-            css_path: 自定义 CSS 文件路径，不传则使用默认样式
+            css_path: 自定义 CSS 文件路径；不传则使用默认样式。
+                传空字符串表示 HTML 已自包含完整样式，不再叠加外部 CSS。
         """
-        self.css_path = css_path or self._default_css()
+        self.css_path = self._default_css() if css_path is None else css_path
 
     @staticmethod
     def _default_css() -> str:
@@ -195,18 +196,25 @@ class PDFRenderer:
 
         return _chrome_render_to_file(html_content, output_path, self.css_path, base_url)
 
-    def render_to_bytes(self, html_content: str) -> bytes:
+    def render_to_bytes(
+        self,
+        html_content: str,
+        base_url: Optional[str] = None,
+    ) -> bytes:
         """
-        将 HTML 内容渲染为 PDF 并返回字节数据
+        将 HTML 内容渲染为 PDF 并返回字节数据。
+
+        base_url 用于解析仍存在的相对资源；Web 服务会优先把文章图片内嵌为
+        data URI，因此即使渲染器运行在独立进程中也不会丢图。
         """
         if _HAS_WEASYPRINT:
-            html = HTML(string=html_content)
+            html = HTML(string=html_content, base_url=base_url)
             css = CSS(filename=self.css_path) if os.path.exists(self.css_path) else None
             doc = html.render(stylesheets=[css] if css else [])
             return doc.write_pdf()
         # Chrome 回退：写临时文件再读回
         with tempfile.TemporaryDirectory(prefix="jats2pdf_") as td:
             tmp_pdf = os.path.join(td, "out.pdf")
-            _chrome_render_to_file(html_content, tmp_pdf, self.css_path, None)
+            _chrome_render_to_file(html_content, tmp_pdf, self.css_path, base_url)
             with open(tmp_pdf, "rb") as f:
                 return f.read()

@@ -289,8 +289,14 @@ body {
 }
 
 .figure img {
+  display: block;
+  width: auto;
   max-width: 100%;
+  max-height: 720px;
   height: auto;
+  object-fit: contain;
+  image-orientation: from-image;
+  margin: 0 auto;
   border-radius: 4px;
 }
 
@@ -674,6 +680,14 @@ h1, h2, h3, h4 { break-after: avoid; }
     border-radius: 0;
     box-shadow: none;
     padding: 0;
+  }
+  .article-content .figure img {
+    width: auto;
+    max-width: 100%;
+    max-height: 220mm;
+    object-fit: contain;
+    image-orientation: from-image;
+    break-inside: avoid;
   }
 
   /* 嵌入 SVG 公式尺寸约束（防溢出栏宽，需求4）*/

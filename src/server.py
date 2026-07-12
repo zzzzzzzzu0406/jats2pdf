@@ -24,6 +24,7 @@ API 路由:
 """
 
 import asyncio
+import base64
 import html
 import io
 import mimetypes
@@ -42,13 +43,17 @@ import zipfile
 from contextlib import asynccontextmanager
 from pathlib import PurePosixPath
 
+from PIL import Image, ImageOps
+
 from fastapi import FastAPI, File, UploadFile, Query, HTTPException
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
     JSONResponse,
+    RedirectResponse,
     Response,
 )
+from fastapi.staticfiles import StaticFiles
 
 from .parser.jats_parser import JATSParser
 from .renderer.html_renderer import HTMLRenderer
@@ -114,6 +119,7 @@ _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _MAX_ZIP_UPLOAD_BYTES = 50 * 1024 * 1024
 _MAX_ZIP_EXPANDED_BYTES = 100 * 1024 * 1024
 _MAX_REMOTE_IMAGE_BYTES = 25 * 1024 * 1024
+_MAX_PDF_IMAGE_EDGE = 2400
 _MAX_ZIP_FILES = 500
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff"}
 _PMC_ASSET_DIR = os.path.join(
@@ -136,6 +142,29 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="学术期刊优化平台", lifespan=lifespan)
+
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+_PORTAL_DIST = os.path.join(_PROJECT_ROOT, "web", "upload", "dist")
+_PORTAL_INDEX = os.path.join(_PORTAL_DIST, "index.html")
+_PORTAL_ASSETS = os.path.join(_PORTAL_DIST, "assets")
+_STUDIO_DIST = os.path.join(_PROJECT_ROOT, "web", "article", "dist")
+_STUDIO_INDEX = os.path.join(_STUDIO_DIST, "index.html")
+_STUDIO_ASSETS = os.path.join(_STUDIO_DIST, "assets")
+
+# 构建后的 React 门户与 API 由同一个 FastAPI 端口提供。
+# 开发模式下 Vite 会把 /api 代理到本服务，因此无需开启宽泛 CORS。
+if os.path.isdir(_PORTAL_ASSETS):
+    app.mount(
+        "/portal-assets/assets",
+        StaticFiles(directory=_PORTAL_ASSETS),
+        name="portal-assets",
+    )
+if os.path.isdir(_STUDIO_ASSETS):
+    app.mount(
+        "/studio-assets/assets",
+        StaticFiles(directory=_STUDIO_ASSETS),
+        name="studio-assets",
+    )
 
 # ── 辅助函数 ──────────────────────────────────
 
@@ -356,10 +385,330 @@ def _render_article_html(article, settings: dict) -> str:
         html = html.replace("<body>", '<body class="two-column">', 1)
     return html
 
+
+def _render_preview_html(article, settings: dict) -> str:
+    """渲染屏幕预览与 PDF 共用的文档，保证 DOM 和样式来源一致。"""
+    # 中文期刊双栏正文通常约 9.5-11pt；96dpi 下对应约 13-15px。
+    font_map = {"small": "13px", "medium": "14px", "large": "15px"}
+    template = _jinja_env.get_template("article_preview.html")
+    return template.render(
+        article=article,
+        has_authors=bool(article.authors),
+        has_keywords=bool(article.keywords or article.keywords_en),
+        has_references=bool(article.references),
+        ref_style=settings["ref_style"],
+        two_column=settings["two_column"],
+        font_size=font_map[settings["font_size"]],
+        font_style=settings["font_style"],
+    )
+
+
+def _iter_article_figures(article):
+    """按正文顺序遍历所有图片，兼容新 blocks 与历史 pickle。"""
+    seen = set()
+
+    def emit(figure):
+        marker = id(figure)
+        if marker in seen:
+            return None
+        seen.add(marker)
+        return figure
+
+    def walk(container):
+        blocks = getattr(container, "blocks", None) or []
+        if blocks:
+            for block in blocks:
+                if block.kind == "figure":
+                    figure = emit(block.value)
+                    if figure is not None:
+                        yield figure
+                elif block.kind == "section":
+                    yield from walk(block.value)
+        else:
+            for figure in getattr(container, "figures", []) or []:
+                unique = emit(figure)
+                if unique is not None:
+                    yield unique
+            for section in getattr(container, "sections", []) or getattr(container, "subsections", []) or []:
+                yield from walk(section)
+
+    yield from walk(article)
+
+
+def _find_article_image(article, article_id: str, href: str) -> str:
+    """解析图片到可信本地文件，供 PDF 内嵌和编辑器预览复用。"""
+    if not href or href.startswith("data:"):
+        return ""
+    safe_name = os.path.basename(urllib.parse.urlparse(href).path)
+    if not safe_name:
+        return ""
+
+    candidates = []
+    if re.fullmatch(r"[0-9a-f]{8}", article_id):
+        candidates.append(os.path.join(_ARTICLE_ASSET_DIR, article_id, safe_name))
+    for search_dir in _IMAGE_SEARCH_DIRS:
+        candidates.append(os.path.join(search_dir, safe_name))
+        if not href.startswith(("http://", "https://", "//")):
+            candidates.append(os.path.join(search_dir, href))
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+
+    pmcid = str(getattr(article, "pmcid", "") or "").upper()
+    if re.fullmatch(r"PMC\d+", pmcid):
+        return _cache_pmc_image(pmcid, safe_name)
+    return ""
+
+
+def _image_data_uri(path: str) -> str:
+    """纠正 EXIF 方向并限制超大图片尺寸，输出适合 PDF 的内嵌资源。"""
+    if not path or not os.path.isfile(path):
+        return ""
+    suffix = os.path.splitext(path)[1].lower()
+    if suffix == ".svg":
+        with open(path, "rb") as source:
+            payload = source.read(_MAX_REMOTE_IMAGE_BYTES + 1)
+        if len(payload) > _MAX_REMOTE_IMAGE_BYTES:
+            return ""
+        return "data:image/svg+xml;base64," + base64.b64encode(payload).decode("ascii")
+
+    try:
+        with Image.open(path) as source:
+            image = ImageOps.exif_transpose(source)
+            image.seek(0)
+            if max(image.size) > _MAX_PDF_IMAGE_EDGE:
+                image.thumbnail((_MAX_PDF_IMAGE_EDGE, _MAX_PDF_IMAGE_EDGE), Image.Resampling.LANCZOS)
+            output = io.BytesIO()
+            has_alpha = image.mode in {"RGBA", "LA"} or "transparency" in image.info
+            if has_alpha:
+                image.convert("RGBA").save(output, format="PNG", optimize=True)
+                media_type = "image/png"
+            else:
+                image.convert("RGB").save(
+                    output,
+                    format="JPEG",
+                    quality=90,
+                    optimize=True,
+                    progressive=True,
+                    dpi=(300, 300),
+                )
+                media_type = "image/jpeg"
+            payload = output.getvalue()
+    except Exception:
+        with open(path, "rb") as source:
+            payload = source.read(_MAX_REMOTE_IMAGE_BYTES + 1)
+        if len(payload) > _MAX_REMOTE_IMAGE_BYTES or not _looks_like_image(payload):
+            return ""
+        media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+    return f"data:{media_type};base64,{base64.b64encode(payload).decode('ascii')}"
+
+
+def _embed_article_images(article, article_id: str) -> int:
+    """把文章图片转成 data URI，避免 PDF 引擎无法访问相对 /api URL。"""
+    embedded = 0
+    for figure in _iter_article_figures(article):
+        href = str(getattr(figure, "graphic_href", "") or "")
+        if href.startswith("data:"):
+            embedded += 1
+            continue
+        local_path = _find_article_image(article, article_id, href)
+        data_uri = _image_data_uri(local_path)
+        if data_uri:
+            figure.graphic_href = data_uri
+            embedded += 1
+    return embedded
+
+
+def _paragraph_text(article, paragraph) -> str:
+    parts = []
+    for run in getattr(paragraph, "runs", []) or []:
+        if run.kind == "xref":
+            parts.append(article.xref_label(run.rid, run.text))
+        elif run.kind == "formula" and run.formula:
+            parts.append(run.formula.latex or "[formula]")
+        else:
+            parts.append(run.text)
+    return "".join(parts).strip()
+
+
+def _reference_text(reference) -> str:
+    parts = []
+    if reference.authors:
+        parts.append(f"{reference.authors}.")
+    if reference.title:
+        parts.append(f"{reference.title}.")
+    if reference.journal:
+        parts.append(reference.journal)
+    detail = " ".join(value for value in [reference.year, reference.volume, reference.issue, reference.pages] if value)
+    if detail:
+        parts.append(detail)
+    if reference.doi:
+        parts.append(f"doi:{reference.doi}")
+    return " ".join(parts).strip()
+
+
+def _article_editor_payload(article, article_id: str) -> dict:
+    """把真实 JATS Article 映射到仓库原版编辑器 PaperData。"""
+    sections = []
+    section_ids = {}
+
+    def add_section(section, number: str):
+        paragraphs = [
+            _paragraph_text(article, paragraph)
+            for paragraph in getattr(section, "paragraphs", []) or []
+        ]
+        content = "\n\n".join(text for text in paragraphs if text)
+        title_en = section.title if article.lang == "en" else ""
+        title_zh = section.title if article.lang != "en" else ""
+        section_id = f"section-{number.replace('.', '-')}"
+        section_ids[id(section)] = section_id
+        sections.append({
+            "id": section_id,
+            "number": number,
+            "title": {"en": title_en or section.title, "zh": title_zh or section.title},
+            "content": {"en": content, "zh": content},
+            "subsections": [],
+        })
+        for index, child in enumerate(getattr(section, "subsections", []) or [], 1):
+            add_section(child, f"{number}.{index}")
+
+    for index, section in enumerate(getattr(article, "sections", []) or [], 1):
+        add_section(section, str(index))
+
+    placements = {}
+    content_order = 0
+
+    def record_placement(kind: str, value, section_id: str):
+        nonlocal content_order
+        marker = (kind, id(value))
+        if marker in placements:
+            return
+        content_order += 1
+        placements[marker] = {"sectionId": section_id, "order": content_order}
+
+    def map_content(container, section_id: str = ""):
+        blocks = getattr(container, "blocks", None) or []
+        if blocks:
+            for block in blocks:
+                if block.kind in {"figure", "table"}:
+                    record_placement(block.kind, block.value, section_id)
+                elif block.kind == "section":
+                    child_id = section_ids.get(id(block.value), section_id)
+                    map_content(block.value, child_id)
+            return
+        for figure in getattr(container, "figures", []) or []:
+            record_placement("figure", figure, section_id)
+        for table in getattr(container, "tables", []) or []:
+            record_placement("table", table, section_id)
+        for child in getattr(container, "sections", []) or getattr(container, "subsections", []) or []:
+            map_content(child, section_ids.get(id(child), section_id))
+
+    map_content(article)
+
+    figures = []
+    for index, figure in enumerate(_iter_article_figures(article), 1):
+        safe_name = os.path.basename(urllib.parse.urlparse(figure.graphic_href or "").path)
+        params = {"article_id": article_id}
+        pmcid = str(getattr(article, "pmcid", "") or "").upper()
+        if re.fullmatch(r"PMC\d+", pmcid):
+            params["pmcid"] = pmcid
+        src = f"/api/files/{urllib.parse.quote(safe_name)}?{urllib.parse.urlencode(params)}" if safe_name else ""
+        figures.append({
+            "id": figure.id or f"figure-{index}",
+            "number": figure.number or index,
+            "caption": {"en": figure.caption, "zh": figure.caption},
+            "placeholder": "#eef2f7",
+            "src": src,
+            **placements.get(("figure", id(figure)), {}),
+        })
+
+    tables = []
+    seen_tables = set()
+
+    def table_cell_payload(cell):
+        return {
+            "text": cell.text,
+            "colspan": max(1, int(getattr(cell, "colspan", 1) or 1)),
+            "rowspan": max(1, int(getattr(cell, "rowspan", 1) or 1)),
+            "isHeader": bool(getattr(cell, "is_header", False)),
+            "align": str(getattr(cell, "align", "") or ""),
+        }
+
+    def add_tables(container):
+        for table in getattr(container, "tables", []) or []:
+            marker = id(table)
+            if marker in seen_tables:
+                continue
+            seen_tables.add(marker)
+            header_rows = getattr(table, "header_rows", []) or []
+            body_rows = getattr(table, "body_rows", []) or []
+            headers = [cell.text for cell in header_rows[0]] if header_rows else list(getattr(table, "headers", []) or [])
+            rows = [[cell.text for cell in row] for row in body_rows] if body_rows else list(getattr(table, "rows", []) or [])
+            tables.append({
+                "id": table.id or f"table-{len(tables) + 1}",
+                "number": table.number or len(tables) + 1,
+                "caption": {"en": table.caption, "zh": table.caption},
+                "headers": headers,
+                "rows": [{"cells": row} for row in rows],
+                "headerRows": [[table_cell_payload(cell) for cell in row] for row in header_rows],
+                "bodyRows": [[table_cell_payload(cell) for cell in row] for row in body_rows],
+                "footnotes": list(getattr(table, "footnotes", []) or []),
+                **placements.get(("table", id(table)), {}),
+            })
+        for section in getattr(container, "sections", []) or getattr(container, "subsections", []) or []:
+            add_tables(section)
+
+    add_tables(article)
+
+    title_en = article.title if article.lang == "en" else (article.subtitle or article.title)
+    title_zh = article.title if article.lang != "en" else (article.subtitle or article.title)
+    abstract_en = article.abstract_en or (article.abstract if article.lang == "en" else "")
+    abstract_zh = article.abstract if article.lang != "en" else ""
+    keywords_en = article.keywords_en or (article.keywords if article.lang == "en" else [])
+    keywords_zh = article.keywords if article.lang != "en" else []
+
+    return {
+        "article_id": article_id,
+        "paper": {
+            "journal": article.journal,
+            "journalZh": article.journal,
+            "issn": "",
+            "doi": article.doi,
+            "volume": "",
+            "year": str(article.publication_year or ""),
+            "pages": "",
+            "received": "",
+            "revised": "",
+            "accepted": "",
+            "title": {"en": title_en, "zh": title_zh},
+            "authors": [{
+                "name": f"{author.given_name} {author.surname}".strip(),
+                "nameZh": f"{author.given_name} {author.surname}".strip(),
+                "affKeys": author.affiliation,
+                "email": author.email,
+            } for author in article.authors],
+            "affiliations": [{
+                "key": str(index),
+                "text": " ".join(value for value in [aff.department, aff.name, aff.city, aff.country] if value),
+                "textZh": " ".join(value for value in [aff.department, aff.name, aff.city, aff.country] if value),
+            } for index, aff in enumerate(article.affiliations, 1)],
+            "highlights": [],
+            "highlightsZh": [],
+            "abstract": {"en": abstract_en, "zh": abstract_zh or abstract_en},
+            "keywords": {"en": keywords_en, "zh": keywords_zh or keywords_en},
+            "sections": sections,
+            "figures": figures,
+            "tables": tables,
+            "references": [_reference_text(reference) for reference in article.references],
+        },
+    }
+
 # ── 页面路由 ──────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def page_index():
+    if os.path.isfile(_PORTAL_INDEX):
+        return FileResponse(_PORTAL_INDEX, media_type="text/html")
     articles = []
     for item in store.list_articles(per_page=20)["items"]:
         article = _load_article(item["id"])
@@ -369,8 +718,18 @@ async def page_index():
         journal_name="学术期刊优化平台",
     )
 
+
+@app.get("/studio", response_class=HTMLResponse)
+@app.get("/studio/", response_class=HTMLResponse)
+async def page_studio():
+    if os.path.isfile(_STUDIO_INDEX):
+        return FileResponse(_STUDIO_INDEX, media_type="text/html")
+    return RedirectResponse("/?view=library", status_code=307)
+
 @app.get("/upload", response_class=HTMLResponse)
 async def page_upload():
+    if os.path.isfile(_PORTAL_INDEX):
+        return RedirectResponse("/?view=upload", status_code=307)
     return html_renderer.render_upload(journal_name="学术期刊优化平台")
 
 @app.get("/article/{article_id}", response_class=HTMLResponse)
@@ -381,6 +740,11 @@ async def page_article(
     font_style: str = Query("academic"),
     font_size: str = Query("medium"),
 ):
+    if os.path.isfile(_PORTAL_INDEX):
+        return RedirectResponse(
+            f"/studio/?article={urllib.parse.quote(article_id)}",
+            status_code=307,
+        )
     article = _load_article(article_id)
     _render_formulas(article_id)
     article = _load_article(article_id)  # 重新加载（含 SVG 公式）
@@ -561,6 +925,14 @@ async def api_get_article(article_id: str):
     })
 
 
+@app.get("/api/articles/{article_id}/editor")
+async def api_get_editor_article(article_id: str):
+    """获取供原版 React 文章编辑器使用的真实结构化数据。"""
+    article = _load_article(article_id)
+    article.id = article_id
+    return JSONResponse(_article_editor_payload(article, article_id))
+
+
 @app.get("/api/articles/{article_id}/preview")
 async def api_preview(
     article_id: str,
@@ -575,27 +947,8 @@ async def api_preview(
     article = _load_article(article_id)
     article.id = article_id
 
-    has_authors = len(article.authors) > 0
-    has_keywords = bool(article.keywords or article.keywords_en)
-    has_references = len(article.references) > 0
-
     settings = _get_settings(ref_style, two_column, font_style, font_size)
-    font_map = {"small": "15px", "medium": "17px", "large": "19px"}
-    font_size_css = font_map[settings["font_size"]]
-
-    template = _jinja_env.get_template("article_preview.html")
-    html = template.render(
-        article=article,
-        has_authors=has_authors,
-        has_keywords=has_keywords,
-        has_references=has_references,
-        ref_style=settings["ref_style"],
-        two_column=settings["two_column"],
-        font_size=font_size_css,
-        font_style=settings["font_style"],
-    )
-
-    return HTMLResponse(html)
+    return HTMLResponse(_render_preview_html(article, settings))
 
 
 @app.get("/api/articles/{article_id}/html")
@@ -613,7 +966,7 @@ async def api_download_html(
     article.id = article_id
 
     settings = _get_settings(ref_style, two_column, font_style, font_size)
-    html = _render_article_html(article, settings)
+    html = _render_preview_html(article, settings)
 
     # 文件名只保留 ASCII 字符
     safe_title = article.title.encode("ascii", "ignore").decode()[:30].strip() or "article"
@@ -640,11 +993,14 @@ async def api_download_pdf(
     article.id = article_id
 
     settings = _get_settings(ref_style, two_column, font_style, font_size)
-    html = _render_article_html(article, settings)
+    embedded_images = await asyncio.to_thread(_embed_article_images, article, article_id)
+    html = _render_preview_html(article, settings)
 
     try:
         from .renderer.pdf_renderer import PDFRenderer
-        pdf_renderer = PDFRenderer()
+        # article_preview.html 已包含与屏幕预览完全相同的自包含 CSS；
+        # 不再叠加旧 styles.css，否则会重新引入卡片、跨栏等冲突规则。
+        pdf_renderer = PDFRenderer(css_path="")
         pdf_bytes = pdf_renderer.render_to_bytes(html)
     except Exception as e:
         raise HTTPException(500, f"PDF 生成失败: {str(e)}")
@@ -655,7 +1011,10 @@ async def api_download_pdf(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_title}.pdf"',
+            "X-Embedded-Images": str(embedded_images),
+        },
     )
 
 
