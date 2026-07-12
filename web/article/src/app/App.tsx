@@ -1,4 +1,4 @@
-import { Fragment, useState, useRef, useCallback, useEffect } from "react";
+import { Fragment, createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
 import {
   Upload, Printer, Globe, Eye, Edit3,
   Plus, Trash2, ChevronDown, ChevronRight, BookOpen,
@@ -14,6 +14,7 @@ const SERIF = "'Source Serif 4', 'Times New Roman', Georgia, serif";
 const SANS  = "'Inter', system-ui, sans-serif";
 const MONO  = "'JetBrains Mono', monospace";
 type Lang = "en" | "zh" | "both";
+type UiLanguage = "zh" | "en";
 type EditorTab = "basic" | "abstract" | "sections" | "figures" | "refs";
 
 // 排版设置使用受限枚举，避免把任意字符串直接写入打印样式。
@@ -38,6 +39,7 @@ const DEFAULT_TYPOGRAPHY: TypographySettings = {
 
 const TYPOGRAPHY_STORAGE_KEY = "scholartype-studio-typography";
 const COLUMNS_STORAGE_KEY = "scholartype-studio-columns";
+const UI_LANGUAGE_STORAGE_KEY = "scholartype-ui-language";
 
 // 每种排版风格分别定义正文、标题和图表题注字体，并提供跨平台回退链。
 const STYLE_FONTS: Record<FontStyle, { body: string; heading: string; caption: string }> = {
@@ -98,6 +100,17 @@ function initialColumns(): 1 | 2 {
   }
 }
 
+// 界面语言与门户共用同一个缓存键；论文正文语言仍由 Lang 独立控制。
+function initialUiLanguage(): UiLanguage {
+  const queryLanguage = new URLSearchParams(window.location.search).get("ui_lang");
+  if (queryLanguage === "zh" || queryLanguage === "en") return queryLanguage;
+  try {
+    return window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY) === "en" ? "en" : "zh";
+  } catch {
+    return "zh";
+  }
+}
+
 // 将界面选项转换为论文根节点的 CSS 变量，子元素和 Paged.js 可统一继承。
 function paperTypographyStyle(settings: TypographySettings): React.CSSProperties {
   const preset = STYLE_FONTS[settings.fontStyle];
@@ -130,6 +143,19 @@ interface EditorResponse {
 interface UiCopy {
   zh: string;
   en: string;
+}
+
+const UiLanguageContext = createContext<UiLanguage>("zh");
+
+function useUiCopy() {
+  const language = useContext(UiLanguageContext);
+  return (zh: string, en: string) => language === "zh" ? zh : en;
+}
+
+// 界面文本只显示当前语言；BilingualText 仅保留给论文内容的双语预览。
+function UiText({ zh, en, zhSize = "inherit", weight = 600 }: UiCopy & { zhSize?: string; enSize?: string; weight?: number; stacked?: boolean }) {
+  const language = useContext(UiLanguageContext);
+  return <span style={{ fontSize: zhSize, fontWeight: weight }}>{language === "zh" ? zh : en}</span>;
 }
 
 /* ─── util ───────────────────────────────────────────────────────────── */
@@ -252,7 +278,7 @@ function ArticleTable({ table, lang, columns }: { table: TableItem; lang: Lang; 
                 })}
               </tr>
             )) : (
-              <tr><td colSpan={columnCount} style={{ padding: 8, textAlign: "center", color: "#777", fontStyle: "italic" }}>暂无表格数据 / No table data</td></tr>
+              <tr><td colSpan={columnCount} style={{ padding: 8, textAlign: "center", color: "#777", fontStyle: "italic" }}>{bil ? "暂无表格数据 / No table data" : showZh ? "暂无表格数据" : "No table data"}</td></tr>
             )}
           </tbody>
         </table>
@@ -572,7 +598,7 @@ tr { break-inside: avoid; break-after: auto; }
 `;
 }
 
-function PaginatedPreview({ paper, lang, columns, typography }: { paper: PaperData; lang: Lang; columns: 1 | 2; typography: TypographySettings }) {
+function PaginatedPreview({ paper, lang, columns, typography, uiLanguage }: { paper: PaperData; lang: Lang; columns: 1 | 2; typography: TypographySettings; uiLanguage: UiLanguage }) {
   const sourceRef = useRef<HTMLDivElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -696,7 +722,9 @@ function PaginatedPreview({ paper, lang, columns, typography }: { paper: PaperDa
         <Preview paper={paper} lang={lang} columns={columns} typography={typography} />
       </div>
       <div className="paged-preview-status no-print" style={{ position: "sticky", top: 10, zIndex: 5, width: "fit-content", margin: "0 14px 8px auto", padding: "5px 9px", borderRadius: 3, background: "rgba(15,39,68,0.88)", color: "#fff", fontFamily: SANS, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
-        <BilingualText zh={rendering ? "正在分页…" : `共 ${pageCount} 页`} en={rendering ? "Paginating…" : `${pageCount} pages`} zhSize="0.72rem" enSize="0.54rem" weight={600} />
+        <span style={{ fontSize: "0.72rem", fontWeight: 600 }}>
+          {uiLanguage === "zh" ? (rendering ? "正在分页…" : `共 ${pageCount} 页`) : (rendering ? "Paginating…" : `${pageCount} pages`)}
+        </span>
       </div>
       <div className="paged-preview-scale" style={{ zoom: scale, width: `${100 / scale}%` }}>
         <div ref={outputRef} className="paged-preview-output" />
@@ -712,7 +740,7 @@ function FieldInput({ label, value, onChange, mono }: { label: UiCopy; value: st
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 5 }}>
-        <BilingualText {...label} zhSize="0.74rem" enSize="0.58rem" />
+        <UiText {...label} zhSize="0.74rem" />
       </div>
       <input
         value={value}
@@ -734,7 +762,7 @@ function FieldTextarea({ label, value, onChange, rows = 4 }: { label: UiCopy; va
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 5 }}>
-        <BilingualText {...label} zhSize="0.74rem" enSize="0.58rem" />
+        <UiText {...label} zhSize="0.74rem" />
       </div>
       <textarea
         value={value}
@@ -756,6 +784,7 @@ function FieldTextarea({ label, value, onChange, rows = 4 }: { label: UiCopy; va
 
 function SectionCard({ sec, onChange, onDelete }: { sec: Section; onChange: (s: Section) => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
+  const ui = useUiCopy();
   return (
     <div style={{ marginBottom: 8, border: "1px solid #e5e7eb", borderRadius: 2, overflow: "hidden" }}>
       <div
@@ -764,11 +793,11 @@ function SectionCard({ sec, onChange, onDelete }: { sec: Section; onChange: (s: 
       >
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         <span style={{ flex: 1, fontFamily: SANS, fontSize: "0.78rem", fontWeight: 600 }}>
-          §{sec.number} {sec.title.zh || sec.title.en || "（未命名） / Untitled"}
+          §{sec.number} {sec.title.zh || sec.title.en || ui("（未命名）", "Untitled")}
         </span>
         <button
-          aria-label="删除章节 / Delete section"
-          title="删除章节 / Delete section"
+          aria-label={ui("删除章节", "Delete section")}
+          title={ui("删除章节", "Delete section")}
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 0 }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "#ef4444"; }}
@@ -803,6 +832,7 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
   setTab: (t: EditorTab) => void;
 }) {
   const set = useCallback((patch: Partial<PaperData>) => setPaper({ ...paper, ...patch }), [paper, setPaper]);
+  const ui = useUiCopy();
 
   const TABS: { id: EditorTab; label: UiCopy }[] = [
     { id: "basic",    label: { zh: "基本信息", en: "Basic Info" } },
@@ -827,7 +857,7 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
               color: tab === t.id ? "#c0392b" : "#6b7280",
             }}
           >
-            <BilingualText {...t.label} zhSize="0.76rem" enSize="0.53rem" weight={tab === t.id ? 700 : 600} stacked />
+            <UiText {...t.label} zhSize="0.72rem" weight={tab === t.id ? 700 : 600} />
           </button>
         ))}
       </div>
@@ -854,7 +884,7 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
             <FieldInput label={{ zh: "中文标题", en: "Chinese Title" }} value={paper.title.zh} onChange={(v) => set({ title: { ...paper.title, zh: v } })} />
             <FieldInput label={{ zh: "英文标题", en: "English Title" }} value={paper.title.en} onChange={(v) => set({ title: { ...paper.title, en: v } })} />
 
-            <div style={{ fontFamily: SANS, color: "#6b7280", margin: "14px 0 8px" }}><BilingualText zh="作者" en="Authors" zhSize="0.82rem" enSize="0.61rem" weight={700} /></div>
+            <div style={{ fontFamily: SANS, color: "#6b7280", margin: "14px 0 8px" }}><UiText zh="作者" en="Authors" zhSize="0.82rem" weight={700} /></div>
             {paper.authors.map((a, i) => (
               <div key={i} style={{ marginBottom: 8, padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 2, backgroundColor: "#f9fafb" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -867,16 +897,16 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
                 </div>
                 <button onClick={() => set({ authors: paper.authors.filter((_, j) => j !== i) })}
                   style={{ fontFamily: SANS, fontSize: "0.72rem", color: "#ef4444", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-                  <Trash2 size={11} /> <BilingualText zh="删除" en="Remove" zhSize="0.74rem" enSize="0.56rem" />
+                  <Trash2 size={11} /> <UiText zh="删除" en="Remove" zhSize="0.74rem" />
                 </button>
               </div>
             ))}
             <button onClick={() => set({ authors: [...paper.authors, { name: "", nameZh: "", affKeys: "a" }] })}
               style={{ fontFamily: SANS, fontSize: "0.75rem", color: "#c0392b", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, marginBottom: 16 }}>
-              <Plus size={13} /> <BilingualText zh="添加作者" en="Add Author" zhSize="0.76rem" enSize="0.57rem" />
+              <Plus size={13} /> <UiText zh="添加作者" en="Add Author" zhSize="0.76rem" />
             </button>
 
-            <div style={{ fontFamily: SANS, color: "#6b7280", margin: "4px 0 8px" }}><BilingualText zh="作者单位" en="Affiliations" zhSize="0.82rem" enSize="0.61rem" weight={700} /></div>
+            <div style={{ fontFamily: SANS, color: "#6b7280", margin: "4px 0 8px" }}><UiText zh="作者单位" en="Affiliations" zhSize="0.82rem" weight={700} /></div>
             {paper.affiliations.map((aff, i) => (
               <div key={i} style={{ marginBottom: 8, padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 2, backgroundColor: "#f9fafb" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
@@ -886,13 +916,13 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
                 <FieldInput label={{ zh: "英文单位", en: "English Affiliation" }} value={aff.text} onChange={(v) => { const affiliations = [...paper.affiliations]; affiliations[i] = { ...aff, text: v }; set({ affiliations }); }} />
                 <button onClick={() => set({ affiliations: paper.affiliations.filter((_, j) => j !== i) })}
                   style={{ fontFamily: SANS, fontSize: "0.72rem", color: "#ef4444", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-                  <Trash2 size={11} /> <BilingualText zh="删除" en="Remove" zhSize="0.74rem" enSize="0.56rem" />
+                  <Trash2 size={11} /> <UiText zh="删除" en="Remove" zhSize="0.74rem" />
                 </button>
               </div>
             ))}
             <button onClick={() => set({ affiliations: [...paper.affiliations, { key: String.fromCharCode(97 + paper.affiliations.length), text: "", textZh: "" }] })}
               style={{ fontFamily: SANS, fontSize: "0.75rem", color: "#c0392b", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
-              <Plus size={13} /> <BilingualText zh="添加单位" en="Add Affiliation" zhSize="0.76rem" enSize="0.57rem" />
+              <Plus size={13} /> <UiText zh="添加单位" en="Add Affiliation" zhSize="0.76rem" />
             </button>
           </div>
         )}
@@ -903,12 +933,12 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
             <FieldTextarea label={{ zh: "中文摘要", en: "Chinese Abstract" }} value={paper.abstract.zh} onChange={(v) => set({ abstract: { ...paper.abstract, zh: v } })} rows={7} />
             <FieldTextarea label={{ zh: "英文摘要", en: "English Abstract" }} value={paper.abstract.en} onChange={(v) => set({ abstract: { ...paper.abstract, en: v } })} rows={7} />
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 5 }}><BilingualText zh="中文关键词（逗号分隔）" en="Chinese Keywords (comma-separated)" zhSize="0.74rem" enSize="0.58rem" /></div>
+              <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 5 }}><UiText zh="中文关键词（逗号分隔）" en="Chinese Keywords (comma-separated)" zhSize="0.74rem" /></div>
               <input value={paper.keywords.zh.join(", ")} onChange={(e) => set({ keywords: { ...paper.keywords, zh: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } })}
                 style={{ width: "100%", padding: "6px 10px", fontSize: "0.82rem", fontFamily: SANS, border: "1px solid #e5e7eb", borderRadius: 2, outline: "none" }} />
             </div>
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 5 }}><BilingualText zh="英文关键词（逗号分隔）" en="English Keywords (comma-separated)" zhSize="0.74rem" enSize="0.58rem" /></div>
+              <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 5 }}><UiText zh="英文关键词（逗号分隔）" en="English Keywords (comma-separated)" zhSize="0.74rem" /></div>
               <input value={paper.keywords.en.join(", ")} onChange={(e) => set({ keywords: { ...paper.keywords, en: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } })}
                 style={{ width: "100%", padding: "6px 10px", fontSize: "0.82rem", fontFamily: SANS, border: "1px solid #e5e7eb", borderRadius: 2, outline: "none" }} />
             </div>
@@ -921,7 +951,7 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
         {tab === "sections" && (
           <div>
             <p style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 10 }}>
-              <BilingualText zh="段落之间请保留一个空行。" en="Separate paragraphs with a blank line." zhSize="0.76rem" enSize="0.58rem" weight={500} />
+              <UiText zh="段落之间请保留一个空行。" en="Separate paragraphs with a blank line." zhSize="0.76rem" weight={500} />
             </p>
             {paper.sections.map((sec, i) => (
               <SectionCard
@@ -934,7 +964,7 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
             <button
               onClick={() => set({ sections: [...paper.sections, { id: `s${Date.now()}`, number: String(paper.sections.length + 1), title: { en: "", zh: "" }, content: { en: "", zh: "" }, subsections: [] }] })}
               style={{ fontFamily: SANS, fontSize: "0.75rem", display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid #e5e7eb", borderRadius: 2, backgroundColor: "#f3f4f6", color: "#374151", cursor: "pointer", marginTop: 4 }}>
-              <Plus size={13} /> <BilingualText zh="添加章节" en="Add Section" zhSize="0.76rem" enSize="0.57rem" />
+              <Plus size={13} /> <UiText zh="添加章节" en="Add Section" zhSize="0.76rem" />
             </button>
           </div>
         )}
@@ -942,12 +972,12 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
         {/* ── FIGURES & TABLES ── */}
         {tab === "figures" && (
           <div>
-            <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 8 }}><BilingualText zh="图片" en="Figures" zhSize="0.82rem" enSize="0.61rem" weight={700} /></div>
+            <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 8 }}><UiText zh="图片" en="Figures" zhSize="0.82rem" weight={700} /></div>
             {paper.figures.map((fig, i) => (
               <div key={fig.id} style={{ marginBottom: 8, padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 2, backgroundColor: "#f9fafb" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontFamily: SANS, fontSize: "0.78rem", fontWeight: 600 }}>图 {fig.number} <span style={{ fontSize: "0.6rem", opacity: 0.55 }}>Fig. {fig.number}</span></span>
-                  <button aria-label="删除图片 / Delete figure" title="删除图片 / Delete figure" onClick={() => set({ figures: paper.figures.filter((_, j) => j !== i) })} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={12} /></button>
+                  <span style={{ fontFamily: SANS, fontSize: "0.78rem", fontWeight: 600 }}>{ui(`图 ${fig.number}`, `Figure ${fig.number}`)}</span>
+                  <button aria-label={ui("删除图片", "Delete figure")} title={ui("删除图片", "Delete figure")} onClick={() => set({ figures: paper.figures.filter((_, j) => j !== i) })} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={12} /></button>
                 </div>
                 <FieldInput label={{ zh: "中文图题", en: "Chinese Caption" }} value={fig.caption.zh} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, caption: { ...fig.caption, zh: v } }; set({ figures }); }} />
                 <FieldInput label={{ zh: "英文图题", en: "English Caption" }} value={fig.caption.en} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, caption: { ...fig.caption, en: v } }; set({ figures }); }} />
@@ -957,15 +987,15 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
             ))}
             <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, caption: { en: "", zh: "" }, placeholder: "#dbeafe", src: "" }] })}
               style={{ fontFamily: SANS, fontSize: "0.75rem", display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid #e5e7eb", borderRadius: 2, backgroundColor: "#f3f4f6", color: "#374151", cursor: "pointer", marginBottom: 18 }}>
-              <Plus size={13} /> <BilingualText zh="添加图片" en="Add Figure" zhSize="0.76rem" enSize="0.57rem" />
+              <Plus size={13} /> <UiText zh="添加图片" en="Add Figure" zhSize="0.76rem" />
             </button>
 
-            <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 8 }}><BilingualText zh="表格" en="Tables" zhSize="0.82rem" enSize="0.61rem" weight={700} /></div>
+            <div style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 8 }}><UiText zh="表格" en="Tables" zhSize="0.82rem" weight={700} /></div>
             {paper.tables.map((tbl, i) => (
               <div key={tbl.id} style={{ marginBottom: 8, padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 2, backgroundColor: "#f9fafb" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontFamily: SANS, fontSize: "0.78rem", fontWeight: 600 }}>表 {tbl.number} <span style={{ fontSize: "0.6rem", opacity: 0.55 }}>Table {tbl.number}</span></span>
-                  <button aria-label="删除表格 / Delete table" title="删除表格 / Delete table" onClick={() => set({ tables: paper.tables.filter((_, j) => j !== i) })} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={12} /></button>
+                  <span style={{ fontFamily: SANS, fontSize: "0.78rem", fontWeight: 600 }}>{ui(`表 ${tbl.number}`, `Table ${tbl.number}`)}</span>
+                  <button aria-label={ui("删除表格", "Delete table")} title={ui("删除表格", "Delete table")} onClick={() => set({ tables: paper.tables.filter((_, j) => j !== i) })} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={12} /></button>
                 </div>
                 <FieldInput label={{ zh: "中文表题", en: "Chinese Caption" }} value={tbl.caption.zh} onChange={(v) => { const tables = [...paper.tables]; tables[i] = { ...tbl, caption: { ...tbl.caption, zh: v } }; set({ tables }); }} />
                 <FieldInput label={{ zh: "英文表题", en: "English Caption" }} value={tbl.caption.en} onChange={(v) => { const tables = [...paper.tables]; tables[i] = { ...tbl, caption: { ...tbl.caption, en: v } }; set({ tables }); }} />
@@ -1003,7 +1033,7 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
             ))}
             <button onClick={() => set({ tables: [...paper.tables, { id: `t${Date.now()}`, number: paper.tables.length + 1, caption: { en: "", zh: "" }, headers: ["列 1", "列 2"], rows: [{ cells: ["", ""] }], footnotes: [] }] })}
               style={{ fontFamily: SANS, fontSize: "0.75rem", display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", border: "1px solid #e5e7eb", borderRadius: 2, backgroundColor: "#f3f4f6", color: "#374151", cursor: "pointer" }}>
-              <Plus size={13} /> <BilingualText zh="添加表格" en="Add Table" zhSize="0.76rem" enSize="0.57rem" />
+              <Plus size={13} /> <UiText zh="添加表格" en="Add Table" zhSize="0.76rem" />
             </button>
           </div>
         )}
@@ -1011,7 +1041,7 @@ function EditorPanel({ paper, setPaper, tab, setTab }: {
         {/* ── REFERENCES ── */}
         {tab === "refs" && (
           <div>
-            <p style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 8 }}><BilingualText zh="每行一条参考文献，系统自动编号。" en="One reference per line. Auto-numbered." zhSize="0.76rem" enSize="0.58rem" weight={500} /></p>
+            <p style={{ fontFamily: SANS, color: "#6b7280", marginBottom: 8 }}><UiText zh="每行一条参考文献，系统自动编号。" en="One reference per line. Auto-numbered." zhSize="0.76rem" weight={500} /></p>
             <FieldTextarea label={{ zh: "参考文献", en: "References" }} value={paper.references.join("\n")} onChange={(v) => set({ references: v.split("\n").map((s) => s.trim()).filter(Boolean) })} rows={20} />
           </div>
         )}
@@ -1041,12 +1071,14 @@ function parseUpload(text: string): Partial<PaperData> | null {
 function TypographyToolbar({
   settings,
   columns,
+  uiLanguage,
   onSettings,
   onColumns,
   onReset,
 }: {
   settings: TypographySettings;
   columns: 1 | 2;
+  uiLanguage: UiLanguage;
   onSettings: (next: TypographySettings) => void;
   onColumns: (next: 1 | 2) => void;
   onReset: () => void;
@@ -1065,55 +1097,54 @@ function TypographyToolbar({
   };
   const groupStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 7, minWidth: 0 };
   const labelStyle: React.CSSProperties = { color: "#64748b", fontFamily: SANS, flexShrink: 0 };
+  const ui = (zh: string, en: string) => uiLanguage === "zh" ? zh : en;
 
   return (
     <div className="typesetting-toolbar no-print" style={{ minHeight: 48, flexShrink: 0, display: "flex", alignItems: "center", gap: 14, padding: "7px 16px", backgroundColor: "#f7f9fb", borderBottom: "1px solid #d8dee6", flexWrap: "wrap" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#0f2744", fontFamily: SANS, paddingRight: 4 }}>
         <SlidersHorizontal size={14} />
-        <BilingualText zh="排版设置" en="Typography" zhSize="0.78rem" enSize="0.56rem" weight={700} />
+        <span style={{ fontSize: "0.78rem", fontWeight: 700 }}>{ui("排版设置", "Typography")}</span>
       </div>
 
       <label style={groupStyle}>
-        <span style={labelStyle}><BilingualText zh="风格" en="Style" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <span style={{ ...labelStyle, fontSize: "0.7rem", fontWeight: 600 }}>{ui("风格", "Style")}</span>
         <select
-          aria-label="排版风格 / Typography style"
+          aria-label={ui("排版风格", "Typography style")}
           value={settings.fontStyle}
           onChange={(event) => onSettings({ ...settings, fontStyle: event.target.value as FontStyle })}
           style={controlStyle}
         >
-          <option value="academic">学术经典 / Academic</option>
-          <option value="modern">现代清晰 / Modern</option>
-          <option value="international">国际期刊 / International</option>
+          <option value="academic">{ui("学术经典", "Academic")}</option>
+          <option value="modern">{ui("现代清晰", "Modern")}</option>
+          <option value="international">{ui("国际期刊", "International")}</option>
         </select>
       </label>
 
       <label style={groupStyle}>
         <TypeIcon size={13} style={{ color: "#64748b" }} />
-        <span style={labelStyle}><BilingualText zh="字体" en="Font" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <span style={{ ...labelStyle, fontSize: "0.7rem", fontWeight: 600 }}>{ui("字体", "Font")}</span>
         <select
-          aria-label="正文字体 / Body font"
+          aria-label={ui("正文字体", "Body font")}
           value={settings.fontFamily}
           onChange={(event) => onSettings({ ...settings, fontFamily: event.target.value as FontFamily })}
           style={{ ...controlStyle, minWidth: 146 }}
         >
-          <option value="auto">跟随风格 / Auto</option>
-          <option value="song">宋体 / Song</option>
+          <option value="auto">{ui("跟随风格", "Follow style")}</option>
+          <option value="song">{ui("宋体", "Song serif")}</option>
           <option value="times">Times New Roman</option>
-          <option value="sans">无衬线 / Sans</option>
-          <option value="kai">楷体 / Kai</option>
+          <option value="sans">{ui("无衬线", "Sans serif")}</option>
+          <option value="kai">{ui("楷体", "Kai serif")}</option>
         </select>
       </label>
 
       <div style={groupStyle}>
-        <span style={labelStyle}><BilingualText zh="字号" en="Size" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <span style={{ ...labelStyle, fontSize: "0.7rem", fontWeight: 600 }}>{ui("字号", "Size")}</span>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 32px)", height: 30, border: "1px solid #cfd6df", borderRadius: 2, overflow: "hidden", backgroundColor: "#fff" }}>
-          {([[
-            "small", "A-", "小号 / Small",
-          ], [
-            "medium", "A", "中号 / Medium",
-          ], [
-            "large", "A+", "大号 / Large",
-          ]] as const).map(([value, label, title]) => (
+          {([
+            { value: "small", label: "A-", title: ui("小号", "Small") },
+            { value: "medium", label: "A", title: ui("中号", "Medium") },
+            { value: "large", label: "A+", title: ui("大号", "Large") },
+          ] as const).map(({ value, label, title }) => (
             <button
               key={value}
               type="button"
@@ -1130,29 +1161,29 @@ function TypographyToolbar({
 
       <label style={groupStyle}>
         <Rows3 size={13} style={{ color: "#64748b" }} />
-        <span style={labelStyle}><BilingualText zh="行距" en="Leading" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <span style={{ ...labelStyle, fontSize: "0.7rem", fontWeight: 600 }}>{ui("行距", "Leading")}</span>
         <select
-          aria-label="正文行距 / Body leading"
+          aria-label={ui("正文行距", "Body leading")}
           value={settings.lineHeight}
           onChange={(event) => onSettings({ ...settings, lineHeight: event.target.value as LineHeight })}
           style={{ ...controlStyle, minWidth: 112 }}
         >
-          <option value="compact">紧凑 / Compact</option>
-          <option value="standard">标准 / Standard</option>
-          <option value="relaxed">宽松 / Relaxed</option>
+          <option value="compact">{ui("紧凑", "Compact")}</option>
+          <option value="standard">{ui("标准", "Standard")}</option>
+          <option value="relaxed">{ui("宽松", "Relaxed")}</option>
         </select>
       </label>
 
       <div style={{ ...groupStyle, marginLeft: "auto" }}>
-        <span style={labelStyle}><BilingualText zh="分栏" en="Columns" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <span style={{ ...labelStyle, fontSize: "0.7rem", fontWeight: 600 }}>{ui("分栏", "Columns")}</span>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 34px)", height: 30, border: "1px solid #cfd6df", borderRadius: 2, overflow: "hidden", backgroundColor: "#fff" }}>
-          {([{ value: 1 as const, icon: AlignLeft, title: "单栏 / One column" }, { value: 2 as const, icon: Columns, title: "双栏 / Two columns" }] as const).map(({ value, icon: Icon, title }) => (
+          {([{ value: 1 as const, icon: AlignLeft, title: ui("单栏", "One column") }, { value: 2 as const, icon: Columns, title: ui("双栏", "Two columns") }] as const).map(({ value, icon: Icon, title }) => (
             <button key={value} type="button" title={title} aria-label={title} onClick={() => onColumns(value)} style={{ border: "none", borderRight: value === 1 ? "1px solid #d8dee6" : "none", backgroundColor: columns === value ? "#0f2744" : "#fff", color: columns === value ? "#fff" : "#475569", cursor: "pointer", display: "grid", placeItems: "center" }}>
               <Icon size={14} />
             </button>
           ))}
         </div>
-        <button type="button" title="恢复默认排版 / Reset typography" aria-label="恢复默认排版 / Reset typography" onClick={onReset} style={{ width: 30, height: 30, border: "1px solid #cfd6df", borderRadius: 2, backgroundColor: "#fff", color: "#64748b", cursor: "pointer", display: "grid", placeItems: "center" }}>
+        <button type="button" title={ui("恢复默认排版", "Reset typography")} aria-label={ui("恢复默认排版", "Reset typography")} onClick={onReset} style={{ width: 30, height: 30, border: "1px solid #cfd6df", borderRadius: 2, backgroundColor: "#fff", color: "#64748b", cursor: "pointer", display: "grid", placeItems: "center" }}>
           <RotateCcw size={13} />
         </button>
       </div>
@@ -1166,6 +1197,7 @@ function TypographyToolbar({
 export default function App() {
   const [paper, setPaper]     = useState<PaperData>(DEMO);
   const [lang, setLang]       = useState<Lang>("en");
+  const [uiLanguage, setUiLanguage] = useState<UiLanguage>(initialUiLanguage);
   const [columns, setColumns] = useState<1 | 2>(initialColumns);
   const [typography, setTypography] = useState<TypographySettings>(initialTypography);
   const [tab, setTab]         = useState<EditorTab>("basic");
@@ -1173,6 +1205,8 @@ export default function App() {
   const [toast, setToast]     = useState<{ msg: string; ok: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const uiLanguageRef = useRef<UiLanguage>(uiLanguage);
+  const ui = (zh: string, en: string) => uiLanguage === "zh" ? zh : en;
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -1189,13 +1223,18 @@ export default function App() {
       }
       const payload = await response.json() as EditorResponse;
       setPaper(payload.paper);
-      showToast(`已载入 “${payload.paper.title.zh || payload.paper.title.en}” / Loaded`);
+      const title = payload.paper.title.zh || payload.paper.title.en;
+      showToast(uiLanguageRef.current === "zh" ? `已载入“${title}”` : `Loaded “${title}”`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), false);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    uiLanguageRef.current = uiLanguage;
+  }, [uiLanguage]);
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("article");
@@ -1207,6 +1246,7 @@ export default function App() {
       // 本地缓存用于普通刷新；URL 参数用于复制链接后恢复设置。
       window.localStorage.setItem(TYPOGRAPHY_STORAGE_KEY, JSON.stringify(typography));
       window.localStorage.setItem(COLUMNS_STORAGE_KEY, String(columns));
+      window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, uiLanguage);
     } catch {
       // 浏览器禁用本地存储时仍保留 URL 参数，不影响当前排版。
     }
@@ -1216,8 +1256,9 @@ export default function App() {
     url.searchParams.set("font_size", typography.fontSize);
     url.searchParams.set("line_height", typography.lineHeight);
     url.searchParams.set("two_column", String(columns === 2));
+    url.searchParams.set("ui_lang", uiLanguage);
     window.history.replaceState({}, "", url);
-  }, [typography, columns]);
+  }, [typography, columns, uiLanguage]);
 
   const handleFile = async (file: File) => {
     const lowerName = file.name.toLowerCase();
@@ -1246,9 +1287,9 @@ export default function App() {
       const parsed = parseUpload(e.target?.result as string);
       if (parsed) {
         setPaper((p) => ({ ...p, ...parsed }));
-        showToast(`已导入 “${file.name}” / Imported`);
+        showToast(ui(`已导入“${file.name}”`, `Imported “${file.name}”`));
       } else {
-        showToast("无法解析文件 / Could not parse file", false);
+        showToast(ui("无法解析文件", "Could not parse file"), false);
       }
     };
     reader.readAsText(file);
@@ -1300,6 +1341,7 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
   };
 
   return (
+    <UiLanguageContext.Provider value={uiLanguage}>
     <div className="studio-app" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
         @media print {
@@ -1349,19 +1391,19 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
       <header className="no-print" style={{ backgroundColor: "#0f2744", borderBottom: "2px solid #c0392b", position: "sticky", top: 0, zIndex: 40 }}>
         <div className="studio-header-row" style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 16px", height: 52 }}>
           <BookOpen size={17} style={{ color: "#7faacc", flexShrink: 0 }} />
-          <span style={{ fontFamily: SANS, color: "#fff" }}>
-            <BilingualText zh="学术论文排版" en="Academic Paper Formatter" zhSize="0.9rem" enSize="0.6rem" weight={700} />
+          <span style={{ fontFamily: SANS, color: "#fff", fontSize: "0.9rem", fontWeight: 700 }}>
+            {ui("学术论文排版", "Academic Paper Formatter")}
           </span>
-          <span style={{ fontFamily: SANS, color: "rgba(255,255,255,0.48)", marginLeft: 2 }} className="studio-tagline hidden md:block">
-            <BilingualText zh="标准期刊版式" en="JATS XML Layout" zhSize="0.7rem" enSize="0.53rem" weight={500} />
+          <span style={{ fontFamily: SANS, color: "rgba(255,255,255,0.48)", marginLeft: 2, fontSize: "0.7rem", fontWeight: 500 }} className="studio-tagline hidden md:block">
+            {ui("标准期刊版式", "JATS XML Layout")}
           </span>
 
           <div style={{ display: "flex", gap: 2, marginLeft: 8 }}>
-            <button onClick={() => window.location.assign("/?view=upload")} style={btnGhost}>
-              <Upload size={12} /> <BilingualText zh="上传" en="Upload" zhSize="0.74rem" enSize="0.53rem" />
+            <button onClick={() => window.location.assign(`/?view=upload&ui_lang=${uiLanguage}`)} style={btnGhost}>
+              <Upload size={12} /> {ui("上传", "Upload")}
             </button>
-            <button onClick={() => window.location.assign("/?view=library")} style={btnGhost}>
-              <BookOpen size={12} /> <BilingualText zh="文章库" en="Library" zhSize="0.74rem" enSize="0.53rem" />
+            <button onClick={() => window.location.assign(`/?view=library&ui_lang=${uiLanguage}`)} style={btnGhost}>
+              <BookOpen size={12} /> {ui("文章库", "Library")}
             </button>
           </div>
 
@@ -1374,34 +1416,48 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
             <input ref={fileRef} type="file" accept=".txt,.json,.xml,.zip" style={{ display: "none" }}
               onChange={(e) => { if (e.target.files?.[0]) void handleFile(e.target.files[0]); }} />
             <button onClick={() => fileRef.current?.click()} style={btnGhost}>
-              <Upload size={13} /> <BilingualText zh="导入论文" en="Import" zhSize="0.74rem" enSize="0.53rem" />
+              <Upload size={13} /> {ui("导入论文", "Import")}
             </button>
           </div>
 
           {/* view toggle */}
           <div style={{ display: "flex", gap: 1, padding: 2, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 2, marginLeft: 4 }}>
-            {([{ v: "split" as const, icon: Edit3, label: { zh: "编辑预览", en: "Edit + Preview" } }, { v: "preview" as const, icon: Eye, label: { zh: "仅预览", en: "Preview" } }] as const).map(({ v, icon: Icon, label }) => (
+            {([{ v: "split" as const, icon: Edit3, zh: "编辑预览", en: "Edit + Preview" }, { v: "preview" as const, icon: Eye, zh: "仅预览", en: "Preview" }] as const).map(({ v, icon: Icon, zh, en }) => (
               <button key={v} onClick={() => setMode(v)}
                 style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", fontSize: "0.72rem", fontFamily: SANS, fontWeight: mode === v ? 600 : 400, border: "none", borderRadius: 2, cursor: "pointer", backgroundColor: mode === v ? "rgba(255,255,255,0.22)" : "transparent", color: mode === v ? "#fff" : "rgba(255,255,255,0.5)" }}>
-                <Icon size={11} /><BilingualText {...label} zhSize="0.72rem" enSize="0.51rem" weight={mode === v ? 700 : 500} />
+                <Icon size={11} />{ui(zh, en)}
               </button>
             ))}
           </div>
 
           <div className="studio-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-            {/* language */}
-            <div style={{ display: "flex", gap: 1, padding: 2, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 2 }}>
+            {/* 界面语言：与门户共用同一设置。 */}
+            <div style={{ display: "flex", overflow: "hidden", border: "1px solid rgba(255,255,255,0.24)", borderRadius: 2 }}>
+              {(["zh", "en"] as UiLanguage[]).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setUiLanguage(value)}
+                  style={{ padding: "5px 9px", border: "none", borderLeft: value === "en" ? "1px solid rgba(255,255,255,0.2)" : "none", backgroundColor: uiLanguage === value ? "#fff" : "transparent", color: uiLanguage === value ? "#0f2744" : "rgba(255,255,255,0.68)", fontFamily: SANS, fontSize: "0.68rem", fontWeight: uiLanguage === value ? 700 : 500, cursor: "pointer" }}
+                >
+                  {value === "zh" ? "中文" : "EN"}
+                </button>
+              ))}
+            </div>
+
+            {/* 论文内容语言：只影响论文正文，不改变界面语言。 */}
+            <div title={ui("论文内容语言", "Paper content language")} style={{ display: "flex", gap: 1, padding: 2, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 2 }}>
               <Globe size={12} style={{ color: "rgba(255,255,255,0.4)", margin: "auto 4px" }} />
               {(["en", "zh", "both"] as Lang[]).map((l) => {
-                const lbl: Record<Lang, UiCopy> = {
-                  en: { zh: "英文", en: "EN" },
-                  zh: { zh: "中文", en: "ZH" },
-                  both: { zh: "双语", en: "BI" },
+                const lbl: Record<Lang, string> = {
+                  en: ui("英文", "English"),
+                  zh: ui("中文", "Chinese"),
+                  both: ui("双语", "Bilingual"),
                 };
                 return (
                   <button key={l} onClick={() => setLang(l)}
                     style={{ padding: "4px 8px", fontSize: "0.7rem", fontFamily: SANS, fontWeight: lang === l ? 600 : 400, border: "none", borderRadius: 2, cursor: "pointer", backgroundColor: lang === l ? "rgba(255,255,255,0.25)" : "transparent", color: lang === l ? "#fff" : "rgba(255,255,255,0.5)" }}>
-                    <BilingualText {...lbl[l]} zhSize="0.7rem" enSize="0.5rem" weight={lang === l ? 700 : 500} gap={3} />
+                    {lbl[l]}
                   </button>
                 );
               })}
@@ -1411,12 +1467,12 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
             <button onClick={exportPDF} style={btnPrimary("#c0392b")}
               onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
               onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-              <Printer size={13} /> <BilingualText zh="导出" en="PDF" zhSize="0.74rem" enSize="0.55rem" weight={700} />
+              <Printer size={13} /> {ui("导出 PDF", "Export PDF")}
             </button>
             <button onClick={exportWord} style={btnPrimary("#1d4ed8")}
               onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
               onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}>
-              <FileDown size={13} /> <BilingualText zh="导出" en="Word" zhSize="0.74rem" enSize="0.55rem" weight={700} />
+              <FileDown size={13} /> {ui("导出 Word", "Export Word")}
             </button>
           </div>
         </div>
@@ -1425,6 +1481,7 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
       <TypographyToolbar
         settings={typography}
         columns={columns}
+        uiLanguage={uiLanguage}
         onSettings={setTypography}
         onColumns={setColumns}
         onReset={() => {
@@ -1445,7 +1502,7 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
 
         {/* preview shell */}
         <div className="preview-shell" style={{ flex: 1, overflowY: "auto", backgroundColor: "#e8eaed", minWidth: 0 }}>
-          <PaginatedPreview paper={paper} lang={lang} columns={columns} typography={typography} />
+          <PaginatedPreview paper={paper} lang={lang} columns={columns} typography={typography} uiLanguage={uiLanguage} />
         </div>
 
       </div>
@@ -1453,10 +1510,11 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
       {loading && (
         <div className="no-print" style={{ position: "fixed", inset: 0, zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(15,39,68,0.28)", backdropFilter: "blur(2px)" }}>
           <div style={{ padding: "14px 20px", borderRadius: 4, backgroundColor: "#fff", color: "#0f2744", fontFamily: SANS, fontSize: "0.82rem", boxShadow: "0 8px 30px rgba(0,0,0,0.2)" }}>
-            <BilingualText zh="正在加载并解析论文…" en="Loading and parsing the article…" zhSize="0.84rem" enSize="0.62rem" />
+            {ui("正在加载并解析论文…", "Loading and parsing the article…")}
           </div>
         </div>
       )}
     </div>
+    </UiLanguageContext.Provider>
   );
 }

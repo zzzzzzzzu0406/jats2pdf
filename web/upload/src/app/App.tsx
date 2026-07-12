@@ -22,6 +22,17 @@ import {
 
 type Language = "zh" | "en";
 type PortalView = "upload" | "library" | "reader";
+const UI_LANGUAGE_STORAGE_KEY = "scholartype-ui-language";
+
+function initialLanguage(): Language {
+  const queryLanguage = new URLSearchParams(window.location.search).get("ui_lang");
+  if (queryLanguage === "zh" || queryLanguage === "en") return queryLanguage;
+  try {
+    return window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY) === "en" ? "en" : "zh";
+  } catch {
+    return "zh";
+  }
+}
 
 interface ArticleAuthor {
   name?: string;
@@ -598,7 +609,7 @@ export default function App() {
   const params = new URLSearchParams(window.location.search);
   const initialArticleId = params.get("article");
   const initialView = params.get("view") === "library" ? "library" : "upload";
-  const [lang, setLang] = useState<Language>("zh");
+  const [lang, setLang] = useState<Language>(initialLanguage);
   const [view, setView] = useState<PortalView>(initialArticleId ? "reader" : initialView);
   const [article, setArticle] = useState<ArticleSummary | null>(initialArticleId ? { id: initialArticleId, title: initialArticleId } : null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -608,15 +619,29 @@ export default function App() {
     if (selected !== undefined) setArticle(selected);
     const url = new URL(window.location.href);
     url.search = "";
+    url.searchParams.set("ui_lang", lang);
     if (next === "library") url.searchParams.set("view", "library");
     if (next === "reader" && selected) url.searchParams.set("article", selected.id);
     window.history.pushState({}, "", url);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [lang]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, lang);
+    } catch {
+      // URL 参数仍可在页面之间传递界面语言。
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("ui_lang", lang);
+    window.history.replaceState({}, "", url);
+  }, [lang]);
 
   useEffect(() => {
     const handlePopState = () => {
       const current = new URLSearchParams(window.location.search);
+      const currentLanguage = current.get("ui_lang");
+      if (currentLanguage === "zh" || currentLanguage === "en") setLang(currentLanguage);
       const id = current.get("article");
       if (id) {
         setArticle((existing) => existing?.id === id ? existing : { id, title: id });
@@ -630,7 +655,7 @@ export default function App() {
   }, []);
 
   const openArticle = (selected: ArticleSummary) => {
-    window.location.assign(`/studio/?article=${encodeURIComponent(selected.id)}`);
+    window.location.assign(`/studio/?article=${encodeURIComponent(selected.id)}&ui_lang=${lang}`);
   };
   const uploaded = (selected: ArticleSummary) => {
     setRefreshKey((value) => value + 1);
