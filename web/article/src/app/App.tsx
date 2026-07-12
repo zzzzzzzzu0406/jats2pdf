@@ -1,9 +1,10 @@
 import { Fragment, useState, useRef, useCallback, useEffect } from "react";
 import {
-  Upload, FileText, Printer, Globe, Eye, Edit3,
+  Upload, Printer, Globe, Eye, Edit3,
   Plus, Trash2, ChevronDown, ChevronRight, BookOpen,
   FileDown, AlignLeft, Columns, AlertCircle, CheckCircle2,
-  Share2, Bookmark, ExternalLink,
+  Share2, Bookmark, ExternalLink, SlidersHorizontal, RotateCcw,
+  Type as TypeIcon, Rows3,
 } from "lucide-react";
 import type { FigureItem, PaperData, Section, TableCell, TableItem } from "./types";
 import { DEMO } from "./demo";
@@ -14,6 +15,112 @@ const SANS  = "'Inter', system-ui, sans-serif";
 const MONO  = "'JetBrains Mono', monospace";
 type Lang = "en" | "zh" | "both";
 type EditorTab = "basic" | "abstract" | "sections" | "figures" | "refs";
+
+// 排版设置使用受限枚举，避免把任意字符串直接写入打印样式。
+type FontStyle = "academic" | "modern" | "international";
+type FontFamily = "auto" | "song" | "times" | "sans" | "kai";
+type FontSize = "small" | "medium" | "large";
+type LineHeight = "compact" | "standard" | "relaxed";
+
+interface TypographySettings {
+  fontStyle: FontStyle;
+  fontFamily: FontFamily;
+  fontSize: FontSize;
+  lineHeight: LineHeight;
+}
+
+const DEFAULT_TYPOGRAPHY: TypographySettings = {
+  fontStyle: "academic",
+  fontFamily: "auto",
+  fontSize: "medium",
+  lineHeight: "standard",
+};
+
+const TYPOGRAPHY_STORAGE_KEY = "scholartype-studio-typography";
+const COLUMNS_STORAGE_KEY = "scholartype-studio-columns";
+
+// 每种排版风格分别定义正文、标题和图表题注字体，并提供跨平台回退链。
+const STYLE_FONTS: Record<FontStyle, { body: string; heading: string; caption: string }> = {
+  academic: {
+    body: "'Source Serif 4', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', 'Times New Roman', serif",
+    heading: "Inter, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif",
+    caption: "Inter, 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif",
+  },
+  modern: {
+    body: "Inter, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif",
+    heading: "Inter, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif",
+    caption: "Inter, 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif",
+  },
+  international: {
+    body: "'Times New Roman', 'Source Serif 4', 'Songti SC', STSong, 'Noto Serif CJK SC', serif",
+    heading: "Arial, Helvetica, 'PingFang SC', 'Noto Sans CJK SC', sans-serif",
+    caption: "Arial, Helvetica, 'PingFang SC', 'Noto Sans CJK SC', sans-serif",
+  },
+};
+
+const FAMILY_FONTS: Record<Exclude<FontFamily, "auto">, string> = {
+  song: "'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', STSong, SimSun, serif",
+  times: "'Times New Roman', 'Source Serif 4', 'Noto Serif CJK SC', serif",
+  sans: "Inter, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif",
+  kai: "'Kaiti SC', STKaiti, KaiTi, 'Noto Serif CJK SC', serif",
+};
+
+// URL 参数优先于本地缓存，便于分享或刷新后恢复同一套排版设置。
+function initialTypography(): TypographySettings {
+  let saved: Partial<TypographySettings> = {};
+  try {
+    saved = JSON.parse(window.localStorage.getItem(TYPOGRAPHY_STORAGE_KEY) || "{}");
+  } catch {
+    saved = {};
+  }
+  const params = new URLSearchParams(window.location.search);
+  const fontStyle = params.get("font_style") || saved.fontStyle;
+  const fontFamily = params.get("font_family") || saved.fontFamily;
+  const fontSize = params.get("font_size") || saved.fontSize;
+  const lineHeight = params.get("line_height") || saved.lineHeight;
+  return {
+    fontStyle: fontStyle === "modern" || fontStyle === "international" ? fontStyle : "academic",
+    fontFamily: fontFamily === "song" || fontFamily === "times" || fontFamily === "sans" || fontFamily === "kai" ? fontFamily : "auto",
+    fontSize: fontSize === "small" || fontSize === "large" ? fontSize : "medium",
+    lineHeight: lineHeight === "compact" || lineHeight === "relaxed" ? lineHeight : "standard",
+  };
+}
+
+// 分栏设置与字体设置采用相同的恢复策略。
+function initialColumns(): 1 | 2 {
+  const queryValue = new URLSearchParams(window.location.search).get("two_column");
+  if (queryValue === "false") return 1;
+  if (queryValue === "true") return 2;
+  try {
+    return window.localStorage.getItem(COLUMNS_STORAGE_KEY) === "1" ? 1 : 2;
+  } catch {
+    return 2;
+  }
+}
+
+// 将界面选项转换为论文根节点的 CSS 变量，子元素和 Paged.js 可统一继承。
+function paperTypographyStyle(settings: TypographySettings): React.CSSProperties {
+  const preset = STYLE_FONTS[settings.fontStyle];
+  const bodyFont = settings.fontFamily === "auto" ? preset.body : FAMILY_FONTS[settings.fontFamily];
+  const bodySize = { small: "9.5pt", medium: "10.5pt", large: "11.5pt" }[settings.fontSize];
+  const lineHeight = { compact: "1.48", standard: "1.62", relaxed: "1.76" }[settings.lineHeight];
+  const styleMetrics = {
+    academic: { indent: "2em", gap: "0.34em", headingColor: "#111", headingRule: "transparent" },
+    modern: { indent: "0", gap: "0.62em", headingColor: "#17324d", headingRule: "#cfd8e3" },
+    international: { indent: "1.2em", gap: "0.42em", headingColor: "#111", headingRule: "transparent" },
+  }[settings.fontStyle];
+  return {
+    "--paper-body-font": bodyFont,
+    "--paper-heading-font": preset.heading,
+    "--paper-caption-font": preset.caption,
+    "--paper-body-size": bodySize,
+    "--paper-line-height": lineHeight,
+    "--paper-paragraph-indent": styleMetrics.indent,
+    "--paper-paragraph-gap": styleMetrics.gap,
+    "--paper-heading-color": styleMetrics.headingColor,
+    "--paper-heading-rule": styleMetrics.headingRule,
+  } as React.CSSProperties;
+}
 
 interface EditorResponse {
   article_id: string;
@@ -117,14 +224,14 @@ function ArticleTable({ table, lang, columns }: { table: TableItem; lang: Lang; 
 
   return (
     <figure style={{ breakInside: bodyRows.length > 12 ? "auto" : "avoid", breakBefore: spansColumns && bodyRows.length > 8 ? "page" : "auto", columnSpan: spansColumns ? "all" : undefined, margin: "10px 0 12px", width: "100%" }}>
-      <figcaption style={{ fontFamily: SANS, fontSize: "8pt", fontWeight: 600, color: "#333", marginBottom: 5, lineHeight: 1.4 }}>
+      <figcaption style={{ fontFamily: "var(--paper-caption-font)", fontSize: "calc(var(--paper-body-size) - 2.5pt)", fontWeight: 600, color: "#333", marginBottom: 5, lineHeight: 1.4 }}>
         {bil ? <>表 {table.number}. <span style={{ fontSize: "0.78em", fontWeight: 500 }}>Table {table.number}.</span></> : showZh ? `表 ${table.number}.` : `Table ${table.number}.`}{" "}
         <span style={{ fontWeight: 400 }}>
           {bil ? <><span>{table.caption.zh}</span><span style={{ marginLeft: 5, fontSize: "0.82em", color: "#666" }}>{table.caption.en}</span></> : bi(table.caption, lang)}
         </span>
       </figcaption>
       <div style={{ width: "100%", overflow: "visible" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: columnCount > 5 ? "fixed" : "auto", borderTop: "1.5px solid #111", borderBottom: "1.5px solid #111", fontFamily: SANS, fontSize: columnCount > 7 ? "6.4pt" : columnCount > 5 ? "7pt" : "8pt" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: columnCount > 5 ? "fixed" : "auto", borderTop: "1.5px solid #111", borderBottom: "1.5px solid #111", fontFamily: "var(--paper-caption-font)", fontSize: columnCount > 7 ? "calc(var(--paper-body-size) - 4pt)" : columnCount > 5 ? "calc(var(--paper-body-size) - 3.5pt)" : "calc(var(--paper-body-size) - 2.5pt)" }}>
           {headerRows.length > 0 && (
             <thead style={{ display: "table-header-group" }}>
               {headerRows.map((row, rowIndex) => (
@@ -151,7 +258,7 @@ function ArticleTable({ table, lang, columns }: { table: TableItem; lang: Lang; 
         </table>
       </div>
       {(table.footnotes || []).map((note, index) => (
-        <div key={index} style={{ marginTop: 3, fontFamily: SANS, fontSize: "6.8pt", lineHeight: 1.35, color: "#555" }}>{note}</div>
+        <div key={index} style={{ marginTop: 3, fontFamily: "var(--paper-caption-font)", fontSize: "calc(var(--paper-body-size) - 3.7pt)", lineHeight: 1.35, color: "#555" }}>{note}</div>
       ))}
     </figure>
   );
@@ -176,11 +283,11 @@ function ArticleFigure({ figure, lang, columns }: { figure: FigureItem; lang: La
           style={{ display: "block", width: "auto", maxWidth: "100%", maxHeight: spansColumns ? "165mm" : "92mm", objectFit: "contain", margin: "0 auto", backgroundColor: "#fff" }}
         />
       ) : (
-        <div style={{ backgroundColor: figure.placeholder, border: "1px solid #ddd", padding: "22px 12px", fontSize: "8pt", fontFamily: SANS, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 90 }}>
+        <div style={{ backgroundColor: figure.placeholder, border: "1px solid #ddd", padding: "22px 12px", fontSize: "calc(var(--paper-body-size) - 2.5pt)", fontFamily: "var(--paper-caption-font)", color: "#666", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 90 }}>
           {bil ? `图 ${figure.number} / Fig. ${figure.number}` : showZh ? `图 ${figure.number}` : `Fig. ${figure.number}`}
         </div>
       )}
-      <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#222", marginTop: 5, lineHeight: 1.4, textAlign: "center" }}>
+      <figcaption style={{ fontFamily: "var(--paper-caption-font)", fontSize: "calc(var(--paper-body-size) - 2.5pt)", color: "#222", marginTop: 5, lineHeight: 1.4, textAlign: "center" }}>
         <strong>{bil ? <>图 {figure.number}. <span style={{ fontSize: "0.78em", fontWeight: 500, color: "#555" }}>Fig. {figure.number}.</span></> : showZh ? `图 ${figure.number}.` : `Fig. ${figure.number}.`}</strong>{" "}
         {bil ? <><span>{figure.caption.zh}</span><span style={{ marginLeft: 5, fontSize: "0.82em", color: "#555" }}>{figure.caption.en}</span></> : bi(figure.caption, lang)}
       </figcaption>
@@ -191,10 +298,11 @@ function ArticleFigure({ figure, lang, columns }: { figure: FigureItem; lang: La
 /* ═══════════════════════════════════════════════════════════════════════
    PREVIEW  —  Chinese Journal of Computers inspired two-column style
    ═══════════════════════════════════════════════════════════════════════ */
-function Preview({ paper, lang, columns }: {
+function Preview({ paper, lang, columns, typography }: {
   paper: PaperData;
   lang: Lang;
   columns: 1 | 2;
+  typography: TypographySettings;
 }) {
   const showEn = lang === "en" || lang === "both";
   const showZh = lang === "zh" || lang === "both";
@@ -210,12 +318,14 @@ function Preview({ paper, lang, columns }: {
     <div
       id="preview-root"
       lang={showZh && !showEn ? "zh-CN" : "en"}
+      data-paper-style={typography.fontStyle}
       style={{
-        fontFamily: SERIF,
+        ...paperTypographyStyle(typography),
+        fontFamily: "var(--paper-body-font)",
         backgroundColor: "#fff",
         color: "#111",
-        fontSize: "10.5pt",
-        lineHeight: 1.62,
+        fontSize: "var(--paper-body-size)",
+        lineHeight: "var(--paper-line-height)",
       }}
     >
       <div className="print-running-header">
@@ -225,8 +335,8 @@ function Preview({ paper, lang, columns }: {
       {/* journal header */}
       <div className="issue-header-screen" style={{ borderBottom: "1.2px solid #111", boxShadow: "0 2px 0 -1px #111", padding: "0 0 5px", marginBottom: "14mm" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "end", gap: 10 }}>
-          <span style={{ fontFamily: SERIF, fontSize: "8.5pt" }}>{paper.year || "Online"}</span>
-          <span className="paged-running-journal" style={{ fontFamily: SANS, fontWeight: 700, fontSize: "9pt", letterSpacing: "0.18em", textAlign: "center" }}>
+          <span style={{ fontFamily: "var(--paper-body-font)", fontSize: "calc(var(--paper-body-size) - 2pt)" }}>{paper.year || "Online"}</span>
+          <span className="paged-running-journal" style={{ fontFamily: "var(--paper-heading-font)", fontWeight: 700, fontSize: "calc(var(--paper-body-size) - 1.5pt)", letterSpacing: "0.18em", textAlign: "center" }}>
             {bil ? <><span>{paper.journalZh}</span><span style={{ marginLeft: 6, fontSize: "0.75em", fontWeight: 500, letterSpacing: "0.06em", color: "#555" }}>{paper.journal}</span></> : showZh ? paper.journalZh : paper.journal}
           </span>
           <span style={{ fontFamily: MONO, fontSize: "7.5pt", textAlign: "right" }}>
@@ -237,18 +347,18 @@ function Preview({ paper, lang, columns }: {
 
       {/* title */}
       {showZh && (
-        <h1 style={{ fontFamily: SANS, fontWeight: 700, fontSize: bil ? "17pt" : "19pt", lineHeight: 1.3, margin: "0 auto 5mm", color: "#111", textAlign: "center", maxWidth: "84%", textWrap: "balance" }}>
+        <h1 style={{ fontFamily: "var(--paper-heading-font)", fontWeight: 700, fontSize: bil ? "calc(var(--paper-body-size) + 6.5pt)" : "calc(var(--paper-body-size) + 8.5pt)", lineHeight: 1.3, margin: "0 auto 5mm", color: "var(--paper-heading-color)", textAlign: "center", maxWidth: "84%", textWrap: "balance" }}>
           {paper.title.zh}
         </h1>
       )}
       {showEn && (
-        <h1 style={{ fontFamily: SERIF, fontWeight: 700, fontStyle: "normal", fontSize: bil ? "14pt" : "18pt", lineHeight: 1.3, margin: "0 auto 5mm", color: bil ? "#333" : "#111", textAlign: "center", maxWidth: "94%" }}>
+        <h1 style={{ fontFamily: "var(--paper-body-font)", fontWeight: 700, fontStyle: "normal", fontSize: bil ? "calc(var(--paper-body-size) + 3.5pt)" : "calc(var(--paper-body-size) + 7.5pt)", lineHeight: 1.3, margin: "0 auto 5mm", color: bil ? "#333" : "#111", textAlign: "center", maxWidth: "94%" }}>
           {paper.title.en}
         </h1>
       )}
 
       {/* authors */}
-      <div className="paged-running-authors" style={{ marginBottom: "2.5mm", fontFamily: SANS, fontSize: "10pt", lineHeight: 1.7, textAlign: "center", letterSpacing: "0.03em" }}>
+      <div className="paged-running-authors" style={{ marginBottom: "2.5mm", fontFamily: "var(--paper-caption-font)", fontSize: "calc(var(--paper-body-size) - 0.5pt)", lineHeight: 1.7, textAlign: "center", letterSpacing: "0.03em" }}>
         {paper.authors.map((a, i) => (
           <span key={i}>
             <span style={{ color: "#111", fontWeight: 500 }}>
@@ -261,7 +371,7 @@ function Preview({ paper, lang, columns }: {
       </div>
 
       {/* affiliations */}
-      <div style={{ marginBottom: "3mm", fontFamily: SANS, fontSize: "8pt", color: "#333", lineHeight: 1.55, textAlign: "center" }}>
+      <div style={{ marginBottom: "3mm", fontFamily: "var(--paper-caption-font)", fontSize: "calc(var(--paper-body-size) - 2.5pt)", color: "#333", lineHeight: 1.55, textAlign: "center" }}>
         {paper.affiliations.map((aff) => (
           <div key={aff.key}>
             <sup style={{ fontSize: "6pt" }}>{aff.key}</sup>
@@ -271,7 +381,7 @@ function Preview({ paper, lang, columns }: {
       </div>
 
       {/* article history box */}
-      <div style={{ display: "flex", justifyContent: "center", gap: 18, marginBottom: "4mm", padding: 0, fontFamily: SANS, fontSize: "7.5pt", color: "#555" }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 18, marginBottom: "4mm", padding: 0, fontFamily: "var(--paper-caption-font)", fontSize: "calc(var(--paper-body-size) - 3pt)", color: "#555" }}>
         <div>
           <div style={{ fontWeight: 600, color: "#333", marginBottom: 2 }}>
             {bil ? <BilingualText zh="投稿历程" en="Article History" zhSize="8pt" enSize="6.4pt" /> : showZh ? "投稿历程" : "Article History"}
@@ -289,10 +399,10 @@ function Preview({ paper, lang, columns }: {
       {/* highlights */}
       {(paper.highlights.length > 0 || paper.highlightsZh.length > 0) && (
         <div style={{ marginBottom: 12, padding: "8px 12px", border: "1px solid #e0e0e0", borderLeft: "3px solid #c0392b" }}>
-          <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "8pt", color: "#c0392b", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          <div style={{ fontFamily: "var(--paper-heading-font)", fontWeight: 700, fontSize: "calc(var(--paper-body-size) - 2.5pt)", color: "#c0392b", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>
             {bil ? <BilingualText zh="研究亮点" en="Highlights" zhSize="8.5pt" enSize="6.5pt" weight={700} /> : showZh ? "研究亮点" : "Highlights"}
           </div>
-          <ul style={{ margin: 0, paddingLeft: 14, fontFamily: SANS, fontSize: "8pt", lineHeight: 1.65, color: "#333" }}>
+          <ul style={{ margin: 0, paddingLeft: 14, fontFamily: "var(--paper-caption-font)", fontSize: "calc(var(--paper-body-size) - 2.5pt)", lineHeight: 1.65, color: "#333" }}>
             {showZh && paper.highlightsZh.map((h, i) => <li key={i}>{h}</li>)}
             {bil && <li style={{ listStyle: "none", height: 4 }} />}
             {showEn && paper.highlights.map((h, i) => (
@@ -304,21 +414,21 @@ function Preview({ paper, lang, columns }: {
 
       {/* abstract + keywords */}
       <div style={{ marginBottom: "3mm", padding: 0 }}>
-        <div style={{ float: "left", fontFamily: SANS, fontWeight: 700, fontSize: "9pt", color: "#111", marginRight: "0.8em", letterSpacing: "0.08em" }}>
+        <div style={{ float: "left", fontFamily: "var(--paper-heading-font)", fontWeight: 700, fontSize: "calc(var(--paper-body-size) - 1.5pt)", color: "var(--paper-heading-color)", marginRight: "0.8em", letterSpacing: "0.08em" }}>
           {bil ? <BilingualText zh="摘要" en="Abstract" zhSize="9.5pt" enSize="7pt" weight={700} /> : showZh ? "摘要" : "Abstract"}
         </div>
         {showZh && (
-          <p style={{ margin: "0 0 5px", fontFamily: SERIF, fontSize: "9.5pt", textAlign: "justify", textJustify: "inter-word", lineHeight: 1.62, overflowWrap: "break-word" }}>
+          <p style={{ margin: "0 0 5px", fontFamily: "var(--paper-body-font)", fontSize: "calc(var(--paper-body-size) - 1pt)", textAlign: "justify", textJustify: "inter-word", lineHeight: "var(--paper-line-height)", overflowWrap: "break-word" }}>
             {paper.abstract.zh}
           </p>
         )}
         {bil && <hr style={{ border: "none", borderTop: "1px dashed #ddd", margin: "6px 0" }} />}
         {showEn && (
-          <p style={{ margin: "0 0 6px", fontFamily: SERIF, fontSize: "9.5pt", textAlign: "justify", textJustify: "inter-word", lineHeight: 1.62, fontStyle: bil ? "italic" : "normal", color: bil ? "#444" : "#111", overflowWrap: "break-word" }}>
+          <p style={{ margin: "0 0 6px", fontFamily: "var(--paper-body-font)", fontSize: "calc(var(--paper-body-size) - 1pt)", textAlign: "justify", textJustify: "inter-word", lineHeight: "var(--paper-line-height)", fontStyle: bil ? "italic" : "normal", color: bil ? "#444" : "#111", overflowWrap: "break-word" }}>
             {paper.abstract.en}
           </p>
         )}
-        <div style={{ fontFamily: SANS, fontSize: "8pt", lineHeight: 1.7 }}>
+        <div style={{ fontFamily: "var(--paper-caption-font)", fontSize: "calc(var(--paper-body-size) - 2.5pt)", lineHeight: 1.7 }}>
           <span style={{ fontWeight: 600 }}>{bil ? <BilingualText zh="关键词" en="Keywords" zhSize="8.2pt" enSize="6.4pt" /> : showZh ? "关键词" : "Keywords"}:</span>{" "}
           {(showZh ? paper.keywords.zh : paper.keywords.en).join("; ")}
           {bil && (
@@ -341,7 +451,7 @@ function Preview({ paper, lang, columns }: {
           <Fragment key={sec.id}>
           <div style={{ breakInside: "auto", marginBottom: "0.35em" }}>
             {/* section heading */}
-            <h2 style={{ fontFamily: SANS, fontWeight: 700, fontSize: "11.5pt", lineHeight: 1.35, color: "#111", margin: "1.2em 0 0.4em", breakAfter: "avoid" }}>
+            <h2 style={{ fontFamily: "var(--paper-heading-font)", fontWeight: 700, fontSize: "calc(var(--paper-body-size) + 1pt)", lineHeight: 1.35, color: "var(--paper-heading-color)", margin: "1.2em 0 0.4em", paddingBottom: typography.fontStyle === "modern" ? "0.18em" : 0, borderBottom: "1px solid var(--paper-heading-rule)", breakAfter: "avoid" }}>
               {bil ? (
                 <>
                   <span>{sec.number}. {sec.title.zh}</span>
@@ -355,7 +465,7 @@ function Preview({ paper, lang, columns }: {
               .split("\n\n")
               .filter(Boolean)
               .map((para, pi) => (
-                <p key={pi} style={{ margin: "0 0 0.34em", textAlign: "justify", textJustify: "inter-word", fontFamily: SERIF, fontSize: "10.5pt", lineHeight: 1.62, textIndent: "2em", overflowWrap: "break-word", orphans: 3, widows: 3 }}>
+                <p key={pi} style={{ margin: "0 0 var(--paper-paragraph-gap)", textAlign: "justify", textJustify: "inter-word", fontFamily: "var(--paper-body-font)", fontSize: "var(--paper-body-size)", lineHeight: "var(--paper-line-height)", textIndent: "var(--paper-paragraph-indent)", overflowWrap: "break-word", orphans: 3, widows: 3 }}>
                   {para.trim()}
                 </p>
               ))}
@@ -364,7 +474,7 @@ function Preview({ paper, lang, columns }: {
             {bil && sec.content.en !== sec.content.zh && (
               <div style={{ borderLeft: "2px solid #e8e8e8", paddingLeft: 8, marginBottom: 4 }}>
                 {sec.content.en.split("\n\n").filter(Boolean).map((para, pi) => (
-                  <p key={pi} style={{ margin: "0 0 5px", textAlign: "justify", fontFamily: SERIF, fontSize: "8.8pt", lineHeight: 1.55, color: "#555", fontStyle: "italic", textIndent: "1.2em" }}>
+                  <p key={pi} style={{ margin: "0 0 5px", textAlign: "justify", fontFamily: "var(--paper-body-font)", fontSize: "calc(var(--paper-body-size) - 1.7pt)", lineHeight: "var(--paper-line-height)", color: "#555", fontStyle: "italic", textIndent: "var(--paper-paragraph-indent)" }}>
                     {para.trim()}
                   </p>
                 ))}
@@ -389,10 +499,10 @@ function Preview({ paper, lang, columns }: {
             </>}
       {/* references */}
       <div style={{ marginTop: "1.4em", paddingTop: 0 }}>
-        <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "11pt", marginBottom: "0.7em" }}>
+        <div style={{ fontFamily: "var(--paper-heading-font)", fontWeight: 700, fontSize: "calc(var(--paper-body-size) + 0.5pt)", marginBottom: "0.7em" }}>
           {bil ? <BilingualText zh="参考文献" en="References" zhSize="11pt" enSize="8pt" weight={700} /> : showZh ? "参考文献" : "References"}
         </div>
-        <ol style={{ margin: 0, padding: 0, listStyle: "none", fontFamily: SERIF, fontSize: "8pt", lineHeight: 1.48, color: "#222" }}>
+        <ol style={{ margin: 0, padding: 0, listStyle: "none", fontFamily: "var(--paper-body-font)", fontSize: "calc(var(--paper-body-size) - 2.5pt)", lineHeight: 1.48, color: "#222" }}>
           {paper.references.map((ref, i) => (
             <li key={i} style={{ marginBottom: 3, display: "flex", alignItems: "flex-start", gap: 4 }}>
               <span style={{ flexShrink: 0 }}>[{i + 1}]</span>
@@ -404,7 +514,7 @@ function Preview({ paper, lang, columns }: {
       </div>
 
       {/* page footer */}
-      <div className="article-source-footer" style={{ marginTop: 16, paddingTop: 5, borderTop: "1px solid #111", display: "flex", justifyContent: "space-between", fontFamily: SANS, fontSize: "7pt", color: "#555" }}>
+      <div className="article-source-footer" style={{ marginTop: 16, paddingTop: 5, borderTop: "1px solid #111", display: "flex", justifyContent: "space-between", fontFamily: "var(--paper-caption-font)", fontSize: "7pt", color: "#555" }}>
         <span>{paper.journal} · {paper.volume} ({paper.year}) {paper.pages}</span>
         <span>© {paper.year} {paper.journal || paper.journalZh}</span>
       </div>
@@ -412,13 +522,17 @@ function Preview({ paper, lang, columns }: {
   );
 }
 
-const PAGED_PREVIEW_CSS = `
+// 分页页眉、页脚和页码必须使用同一套字体配置，保证预览与打印一致。
+function pagedPreviewCss(settings: TypographySettings) {
+  const preset = STYLE_FONTS[settings.fontStyle];
+  const bodyFont = settings.fontFamily === "auto" ? preset.body : FAMILY_FONTS[settings.fontFamily];
+  return `
 @page {
   size: A4;
   margin: 18mm 19mm 18mm;
   @top-left {
     content: string(articleAuthors);
-    font-family: "Times New Roman", serif;
+    font-family: ${bodyFont};
     font-size: 7.5pt;
     font-style: italic;
     border-bottom: 0.45pt solid #777;
@@ -426,7 +540,7 @@ const PAGED_PREVIEW_CSS = `
   }
   @top-right {
     content: string(articleJournal);
-    font-family: "Times New Roman", serif;
+    font-family: ${preset.heading};
     font-size: 7.5pt;
     font-style: italic;
     border-bottom: 0.45pt solid #777;
@@ -434,7 +548,7 @@ const PAGED_PREVIEW_CSS = `
   }
   @bottom-center {
     content: counter(page);
-    font-family: "Times New Roman", serif;
+    font-family: ${bodyFont};
     font-size: 7.5pt;
   }
 }
@@ -456,8 +570,9 @@ img, figcaption, h1, h2 { break-inside: avoid; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; break-after: auto; }
 `;
+}
 
-function PaginatedPreview({ paper, lang, columns }: { paper: PaperData; lang: Lang; columns: 1 | 2 }) {
+function PaginatedPreview({ paper, lang, columns, typography }: { paper: PaperData; lang: Lang; columns: 1 | 2; typography: TypographySettings }) {
   const sourceRef = useRef<HTMLDivElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -497,7 +612,7 @@ function PaginatedPreview({ paper, lang, columns }: { paper: PaperData; lang: La
 
       const host = document.createElement("div");
       output.replaceChildren(host);
-      stylesheet = URL.createObjectURL(new Blob([PAGED_PREVIEW_CSS], { type: "text/css" }));
+      stylesheet = URL.createObjectURL(new Blob([pagedPreviewCss(typography)], { type: "text/css" }));
 
       const finishFromDom = () => {
         const total = host.querySelectorAll(".pagedjs_page").length;
@@ -567,7 +682,7 @@ function PaginatedPreview({ paper, lang, columns }: { paper: PaperData; lang: La
       observer?.disconnect();
       if (stylesheet) URL.revokeObjectURL(stylesheet);
     };
-  }, [paper, lang, columns, assetVersion]);
+  }, [paper, lang, columns, typography, assetVersion]);
 
   return (
     <div ref={viewportRef} className="paged-preview-viewport" style={{ position: "relative", width: "100%", minHeight: "100%", padding: "18px 0 36px" }}>
@@ -578,7 +693,7 @@ function PaginatedPreview({ paper, lang, columns }: { paper: PaperData; lang: La
         onLoadCapture={() => setAssetVersion((value) => value + 1)}
         onErrorCapture={() => setAssetVersion((value) => value + 1)}
       >
-        <Preview paper={paper} lang={lang} columns={columns} />
+        <Preview paper={paper} lang={lang} columns={columns} typography={typography} />
       </div>
       <div className="paged-preview-status no-print" style={{ position: "sticky", top: 10, zIndex: 5, width: "fit-content", margin: "0 14px 8px auto", padding: "5px 9px", borderRadius: 3, background: "rgba(15,39,68,0.88)", color: "#fff", fontFamily: SANS, boxShadow: "0 2px 8px rgba(0,0,0,0.15)" }}>
         <BilingualText zh={rendering ? "正在分页…" : `共 ${pageCount} 页`} en={rendering ? "Paginating…" : `${pageCount} pages`} zhSize="0.72rem" enSize="0.54rem" weight={600} />
@@ -922,13 +1037,137 @@ function parseUpload(text: string): Partial<PaperData> | null {
   }
 }
 
+// 排版工具栏集中管理风格、字体、字号、行距和分栏，修改后会触发重新分页。
+function TypographyToolbar({
+  settings,
+  columns,
+  onSettings,
+  onColumns,
+  onReset,
+}: {
+  settings: TypographySettings;
+  columns: 1 | 2;
+  onSettings: (next: TypographySettings) => void;
+  onColumns: (next: 1 | 2) => void;
+  onReset: () => void;
+}) {
+  const controlStyle: React.CSSProperties = {
+    height: 30,
+    minWidth: 120,
+    padding: "0 26px 0 8px",
+    border: "1px solid #cfd6df",
+    borderRadius: 2,
+    backgroundColor: "#fff",
+    color: "#243447",
+    fontFamily: SANS,
+    fontSize: "0.72rem",
+    outline: "none",
+  };
+  const groupStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: 7, minWidth: 0 };
+  const labelStyle: React.CSSProperties = { color: "#64748b", fontFamily: SANS, flexShrink: 0 };
+
+  return (
+    <div className="typesetting-toolbar no-print" style={{ minHeight: 48, flexShrink: 0, display: "flex", alignItems: "center", gap: 14, padding: "7px 16px", backgroundColor: "#f7f9fb", borderBottom: "1px solid #d8dee6", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, color: "#0f2744", fontFamily: SANS, paddingRight: 4 }}>
+        <SlidersHorizontal size={14} />
+        <BilingualText zh="排版设置" en="Typography" zhSize="0.78rem" enSize="0.56rem" weight={700} />
+      </div>
+
+      <label style={groupStyle}>
+        <span style={labelStyle}><BilingualText zh="风格" en="Style" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <select
+          aria-label="排版风格 / Typography style"
+          value={settings.fontStyle}
+          onChange={(event) => onSettings({ ...settings, fontStyle: event.target.value as FontStyle })}
+          style={controlStyle}
+        >
+          <option value="academic">学术经典 / Academic</option>
+          <option value="modern">现代清晰 / Modern</option>
+          <option value="international">国际期刊 / International</option>
+        </select>
+      </label>
+
+      <label style={groupStyle}>
+        <TypeIcon size={13} style={{ color: "#64748b" }} />
+        <span style={labelStyle}><BilingualText zh="字体" en="Font" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <select
+          aria-label="正文字体 / Body font"
+          value={settings.fontFamily}
+          onChange={(event) => onSettings({ ...settings, fontFamily: event.target.value as FontFamily })}
+          style={{ ...controlStyle, minWidth: 146 }}
+        >
+          <option value="auto">跟随风格 / Auto</option>
+          <option value="song">宋体 / Song</option>
+          <option value="times">Times New Roman</option>
+          <option value="sans">无衬线 / Sans</option>
+          <option value="kai">楷体 / Kai</option>
+        </select>
+      </label>
+
+      <div style={groupStyle}>
+        <span style={labelStyle}><BilingualText zh="字号" en="Size" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 32px)", height: 30, border: "1px solid #cfd6df", borderRadius: 2, overflow: "hidden", backgroundColor: "#fff" }}>
+          {([[
+            "small", "A-", "小号 / Small",
+          ], [
+            "medium", "A", "中号 / Medium",
+          ], [
+            "large", "A+", "大号 / Large",
+          ]] as const).map(([value, label, title]) => (
+            <button
+              key={value}
+              type="button"
+              title={title}
+              aria-label={title}
+              onClick={() => onSettings({ ...settings, fontSize: value })}
+              style={{ border: "none", borderRight: value !== "large" ? "1px solid #d8dee6" : "none", backgroundColor: settings.fontSize === value ? "#0f2744" : "#fff", color: settings.fontSize === value ? "#fff" : "#334155", fontFamily: SERIF, fontSize: value === "small" ? "0.68rem" : value === "large" ? "0.86rem" : "0.76rem", cursor: "pointer" }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <label style={groupStyle}>
+        <Rows3 size={13} style={{ color: "#64748b" }} />
+        <span style={labelStyle}><BilingualText zh="行距" en="Leading" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <select
+          aria-label="正文行距 / Body leading"
+          value={settings.lineHeight}
+          onChange={(event) => onSettings({ ...settings, lineHeight: event.target.value as LineHeight })}
+          style={{ ...controlStyle, minWidth: 112 }}
+        >
+          <option value="compact">紧凑 / Compact</option>
+          <option value="standard">标准 / Standard</option>
+          <option value="relaxed">宽松 / Relaxed</option>
+        </select>
+      </label>
+
+      <div style={{ ...groupStyle, marginLeft: "auto" }}>
+        <span style={labelStyle}><BilingualText zh="分栏" en="Columns" zhSize="0.7rem" enSize="0.5rem" weight={600} /></span>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 34px)", height: 30, border: "1px solid #cfd6df", borderRadius: 2, overflow: "hidden", backgroundColor: "#fff" }}>
+          {([{ value: 1 as const, icon: AlignLeft, title: "单栏 / One column" }, { value: 2 as const, icon: Columns, title: "双栏 / Two columns" }] as const).map(({ value, icon: Icon, title }) => (
+            <button key={value} type="button" title={title} aria-label={title} onClick={() => onColumns(value)} style={{ border: "none", borderRight: value === 1 ? "1px solid #d8dee6" : "none", backgroundColor: columns === value ? "#0f2744" : "#fff", color: columns === value ? "#fff" : "#475569", cursor: "pointer", display: "grid", placeItems: "center" }}>
+              <Icon size={14} />
+            </button>
+          ))}
+        </div>
+        <button type="button" title="恢复默认排版 / Reset typography" aria-label="恢复默认排版 / Reset typography" onClick={onReset} style={{ width: 30, height: 30, border: "1px solid #cfd6df", borderRadius: 2, backgroundColor: "#fff", color: "#64748b", cursor: "pointer", display: "grid", placeItems: "center" }}>
+          <RotateCcw size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    ROOT APP
    ═══════════════════════════════════════════════════════════════════════ */
 export default function App() {
   const [paper, setPaper]     = useState<PaperData>(DEMO);
   const [lang, setLang]       = useState<Lang>("en");
-  const [columns, setColumns] = useState<1 | 2>(2);
+  const [columns, setColumns] = useState<1 | 2>(initialColumns);
+  const [typography, setTypography] = useState<TypographySettings>(initialTypography);
   const [tab, setTab]         = useState<EditorTab>("basic");
   const [mode, setMode]       = useState<"split" | "preview">("split");
   const [toast, setToast]     = useState<{ msg: string; ok: boolean } | null>(null);
@@ -962,6 +1201,23 @@ export default function App() {
     const id = new URLSearchParams(window.location.search).get("article");
     if (id) void loadBackendArticle(id);
   }, [loadBackendArticle]);
+
+  useEffect(() => {
+    try {
+      // 本地缓存用于普通刷新；URL 参数用于复制链接后恢复设置。
+      window.localStorage.setItem(TYPOGRAPHY_STORAGE_KEY, JSON.stringify(typography));
+      window.localStorage.setItem(COLUMNS_STORAGE_KEY, String(columns));
+    } catch {
+      // 浏览器禁用本地存储时仍保留 URL 参数，不影响当前排版。
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("font_style", typography.fontStyle);
+    url.searchParams.set("font_family", typography.fontFamily);
+    url.searchParams.set("font_size", typography.fontSize);
+    url.searchParams.set("line_height", typography.lineHeight);
+    url.searchParams.set("two_column", String(columns === 2));
+    window.history.replaceState({}, "", url);
+  }, [typography, columns]);
 
   const handleFile = async (file: File) => {
     const lowerName = file.name.toLowerCase();
@@ -1022,7 +1278,7 @@ th{border-bottom:2px solid #111;border-top:1px solid #ccc;padding:3pt 6pt;font-w
 td{border-bottom:1px solid #ddd;padding:3pt 6pt}
 figcaption{font-size:8pt;color:#444;margin-top:4pt}
 ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
-</style></head><body>${node.innerHTML}</body></html>`;
+</style></head><body>${node.outerHTML}</body></html>`;
     const blob = new Blob(["﻿", html], { type: "application/msword" });
     const url  = URL.createObjectURL(blob);
     const a    = Object.assign(document.createElement("a"), { href: url, download: "article.doc" });
@@ -1044,12 +1300,13 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
   };
 
   return (
-    <>
+    <div className="studio-app" style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
         @media print {
           .no-print { display: none !important; }
           html, body { background: #fff !important; }
           body { margin: 0 !important; }
+          .studio-app { height: auto !important; display: block !important; overflow: visible !important; }
           .preview-shell { padding: 0 !important; overflow: visible !important; background: #fff !important; }
           .studio-main { height: auto !important; display: block !important; }
           .pagination-source, .paged-preview-status { display: none !important; }
@@ -1059,7 +1316,7 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
           .paged-preview-output .pagedjs_page { margin: 0 !important; box-shadow: none !important; break-after: page !important; }
           #preview-root img { max-width: 100% !important; height: auto !important; object-fit: contain !important; break-inside: avoid !important; }
           #preview-root img, #preview-root h1, #preview-root h2 { break-inside: avoid; }
-          .print-running-header { display: flex !important; position: fixed; top: 5mm; left: 19mm; right: 19mm; z-index: 20; justify-content: space-between; padding-bottom: 2mm; border-bottom: 0.5pt solid #111; font-family: ${SANS}; font-size: 8pt; }
+          .print-running-header { display: flex !important; position: fixed; top: 5mm; left: 19mm; right: 19mm; z-index: 20; justify-content: space-between; padding-bottom: 2mm; border-bottom: 0.5pt solid #111; font-family: var(--paper-caption-font); font-size: 8pt; }
           .issue-header-screen { display: none !important; }
           @page { margin: 0; size: A4; }
         }
@@ -1075,7 +1332,8 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
           .studio-header-row { height: auto !important; min-height: 52px; flex-wrap: wrap; row-gap: 6px; padding-top: 6px !important; padding-bottom: 6px !important; }
           .studio-tagline { display: none !important; }
           .studio-actions { width: 100%; margin-left: 0 !important; justify-content: flex-end; padding-top: 5px; border-top: 1px solid rgba(255,255,255,0.12); }
-          .studio-main { height: calc(100vh - 135px) !important; }
+          .studio-main { min-height: 0 !important; }
+          .typesetting-toolbar { gap: 9px !important; padding-left: 10px !important; padding-right: 10px !important; }
         }
       `}</style>
 
@@ -1149,16 +1407,6 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
               })}
             </div>
 
-            {/* column toggle */}
-            <div style={{ display: "flex", gap: 1, padding: 2, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 2 }}>
-              {([{ v: 1 as const, icon: AlignLeft, label: "单栏 / One column" }, { v: 2 as const, icon: Columns, label: "双栏 / Two columns" }] as const).map(({ v, icon: Icon, label }) => (
-                <button key={v} onClick={() => setColumns(v)} aria-label={label} title={label}
-                  style={{ padding: "4px 7px", border: "none", borderRadius: 2, cursor: "pointer", backgroundColor: columns === v ? "rgba(255,255,255,0.25)" : "transparent", color: columns === v ? "#fff" : "rgba(255,255,255,0.5)" }}>
-                  <Icon size={13} />
-                </button>
-              ))}
-            </div>
-
             {/* export */}
             <button onClick={exportPDF} style={btnPrimary("#c0392b")}
               onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
@@ -1174,17 +1422,19 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
         </div>
       </header>
 
-      {/* hint bar */}
-      <div className="no-print" style={{ backgroundColor: "#f0f4f8", borderBottom: "1px solid #e5e7eb", padding: "5px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-        <FileText size={13} style={{ color: "#9ca3af", flexShrink: 0 }} />
-        <span style={{ fontFamily: SANS, color: "#6b7280", display: "flex", alignItems: "baseline", gap: 7, flexWrap: "wrap" }}>
-          <span style={{ fontSize: "0.76rem", fontWeight: 600 }}>通过 FastAPI 导入 JATS XML / ZIP，或在左侧编辑论文内容，可随时导出 PDF 和 Word。</span>
-          <span style={{ fontSize: "0.58rem", opacity: 0.65 }}>Import JATS XML / ZIP, edit fields on the left, and export PDF or Word at any time.</span>
-        </span>
-      </div>
+      <TypographyToolbar
+        settings={typography}
+        columns={columns}
+        onSettings={setTypography}
+        onColumns={setColumns}
+        onReset={() => {
+          setTypography(DEFAULT_TYPOGRAPHY);
+          setColumns(2);
+        }}
+      />
 
       {/* ═══ MAIN SPLIT ═══ */}
-      <div className="studio-main" style={{ display: "flex", height: "calc(100vh - 88px)" }}>
+      <div className="studio-main" style={{ display: "flex", flex: "1 1 auto", minHeight: 0 }}>
 
         {/* editor */}
         {mode === "split" && (
@@ -1195,7 +1445,7 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
 
         {/* preview shell */}
         <div className="preview-shell" style={{ flex: 1, overflowY: "auto", backgroundColor: "#e8eaed", minWidth: 0 }}>
-          <PaginatedPreview paper={paper} lang={lang} columns={columns} />
+          <PaginatedPreview paper={paper} lang={lang} columns={columns} typography={typography} />
         </div>
 
       </div>
@@ -1207,6 +1457,6 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
