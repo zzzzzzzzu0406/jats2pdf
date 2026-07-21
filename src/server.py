@@ -27,6 +27,7 @@ import asyncio
 import base64
 import html
 import io
+import json
 import mimetypes
 import os
 import pickle
@@ -55,49 +56,26 @@ from fastapi.responses import (
 )
 from fastapi.staticfiles import StaticFiles
 
+from .config import (
+    is_dev,
+    is_prod,
+    startup_banner,
+    PORTAL_DEV_URL,
+    WEB_INDEX,
+    WEB_ASSETS,
+    STUDIO_DEV_URL,
+    SAMPLE_DIRS,
+    PMC_ASSET_DIR,
+    ARTICLE_ASSET_DIR,
+)
+from .jinja_env import get_jinja_env
 from .parser.jats_parser import JATSParser
 from .renderer.html_renderer import HTMLRenderer
 from .store import ArticleStore
-from jinja2 import Environment, FileSystemLoader, pass_context, select_autoescape
-
-# ── Jinja2 环境（复用模板目录）──
-_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
-_jinja_env = Environment(
-    loader=FileSystemLoader(_TEMPLATE_DIR),
-    autoescape=select_autoescape(enabled_extensions=("html", "xml")),
-)
-_jinja_env.filters["orcid_url"] = lambda orcid: f"https://orcid.org/{orcid}" if orcid else ""
 
 
-@pass_context
-def _resolve_image_path(context, href: str) -> str:
-    """将 graphic_href 解析为可用的图片 URL。
-    - 绝对 URL (http/https/data:) → 原样返回
-    - 相对路径 (如 arch.svg) → /api/files/{basename}
-    - 空字符串 → 原样返回
-    """
-    if not href:
-        return href
-    if href.startswith("data:"):
-        return href
-    if href.startswith(("http://", "https://", "//")):
-        return ""
-    safe = os.path.basename(href)
-    if not safe:
-        return href
-    article = context.get("article")
-    pmcid = str(getattr(article, "pmcid", "") or "").upper()
-    article_id = str(getattr(article, "id", "") or "")
-    params = {}
-    if re.fullmatch(r"[0-9a-f]{8}", article_id):
-        params["article_id"] = article_id
-    if re.fullmatch(r"PMC\d+", pmcid):
-        params["pmcid"] = pmcid
-    suffix = f"?{urllib.parse.urlencode(params)}" if params else ""
-    return f"/api/files/{safe}{suffix}"
-
-
-_jinja_env.filters["resolve_image"] = _resolve_image_path
+# ── Jinja2 环境（统一实例）──
+_jinja_env = get_jinja_env()
 
 # ── 全局实例 ──────────────────────────────────
 
@@ -109,12 +87,6 @@ _formula_cache: set = set()
 _pmc_asset_cache: dict[str, dict[str, str]] = {}
 _pmc_asset_lock = threading.RLock()
 
-# 图片文件搜索目录（按优先级排列）
-_IMAGE_SEARCH_DIRS = [
-    os.path.join(os.path.dirname(os.path.dirname(__file__)), "samples", "output"),
-    os.path.join(os.path.dirname(os.path.dirname(__file__)), "samples", "real"),
-    os.path.join(os.path.dirname(os.path.dirname(__file__)), "samples"),
-]
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _MAX_ZIP_UPLOAD_BYTES = 50 * 1024 * 1024
 _MAX_ZIP_EXPANDED_BYTES = 100 * 1024 * 1024
@@ -122,18 +94,13 @@ _MAX_REMOTE_IMAGE_BYTES = 25 * 1024 * 1024
 _MAX_PDF_IMAGE_EDGE = 2400
 _MAX_ZIP_FILES = 500
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff"}
-_PMC_ASSET_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "data", "pmc_assets"
-)
-_ARTICLE_ASSET_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "data", "article_assets"
-)
 
 # ── 生命周期 ──────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """启动时种子数据"""
+    print(startup_banner())
     print("[server] 初始化数据存储...")
     store.initialize()
     with store._conn() as conn:
@@ -143,28 +110,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="学术期刊优化平台", lifespan=lifespan)
 
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
-_PORTAL_DIST = os.path.join(_PROJECT_ROOT, "web", "upload", "dist")
-_PORTAL_INDEX = os.path.join(_PORTAL_DIST, "index.html")
-_PORTAL_ASSETS = os.path.join(_PORTAL_DIST, "assets")
-_STUDIO_DIST = os.path.join(_PROJECT_ROOT, "web", "article", "dist")
-_STUDIO_INDEX = os.path.join(_STUDIO_DIST, "index.html")
-_STUDIO_ASSETS = os.path.join(_STUDIO_DIST, "assets")
-
-# 构建后的 React 门户与 API 由同一个 FastAPI 端口提供。
+# 统一 React 应用与 API 由同一个 FastAPI 端口提供。
 # 开发模式下 Vite 会把 /api 代理到本服务，因此无需开启宽泛 CORS。
-if os.path.isdir(_PORTAL_ASSETS):
+if is_prod() and os.path.isdir(WEB_ASSETS):
     app.mount(
-        "/portal-assets/assets",
-        StaticFiles(directory=_PORTAL_ASSETS),
-        name="portal-assets",
+        "/assets",
+        StaticFiles(directory=WEB_ASSETS),
+        name="web-assets",
     )
-if os.path.isdir(_STUDIO_ASSETS):
-    app.mount(
-        "/studio-assets/assets",
-        StaticFiles(directory=_STUDIO_ASSETS),
-        name="studio-assets",
-    )
+
+# 向后兼容别名（测试和其他模块可能引用带下划线前缀的名称）
+_ARTICLE_ASSET_DIR = ARTICLE_ASSET_DIR
+_IMAGE_SEARCH_DIRS = SAMPLE_DIRS
 
 # ── 辅助函数 ──────────────────────────────────
 
@@ -180,6 +137,15 @@ def _load_article(article_id: str):
         if match:
             article.pmcid = f"PMC{match.group(1)}"
     return article
+
+
+def _deep_merge(base: dict, overlay: dict) -> None:
+    """原地将 overlay 合并到 base 中（深度合并，列表直接替换）。"""
+    for key, value in overlay.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            _deep_merge(base[key], value)
+        else:
+            base[key] = value
 
 
 def _extract_pmc_asset_map(page_html: str) -> dict[str, str]:
@@ -305,7 +271,7 @@ def _cache_pmc_image(pmcid: str, filename: str) -> str:
     if not re.fullmatch(r"PMC\d+", pmcid):
         return ""
     safe_name = os.path.basename(filename)
-    cache_dir = os.path.join(_PMC_ASSET_DIR, pmcid)
+    cache_dir = os.path.join(PMC_ASSET_DIR, pmcid)
     cache_path = os.path.join(cache_dir, safe_name)
     if os.path.isfile(cache_path):
         return cache_path
@@ -372,17 +338,19 @@ def _get_settings(
     }
 
 def _render_article_html(article, settings: dict) -> str:
-    """渲染论文详情 HTML"""
-    html = html_renderer.render_article(
-        article,
+    """渲染论文详情 HTML（与 preview 共用 article_preview.html）。"""
+    font_map = {"small": "13px", "medium": "14px", "large": "15px"}
+    template = _jinja_env.get_template("article_preview.html")
+    html = template.render(
+        article=article,
+        has_authors=bool(article.authors),
+        has_keywords=bool(article.keywords or article.keywords_en),
+        has_references=bool(article.references),
         ref_style=settings["ref_style"],
         two_column=settings.get("two_column", False),
+        font_size=font_map.get(settings.get("font_size", "medium"), "14px"),
         font_style=settings.get("font_style", "academic"),
-        font_size=settings.get("font_size", "medium"),
-        asset_mode="web",
     )
-    if settings.get("two_column"):
-        html = html.replace("<body>", '<body class="two-column">', 1)
     return html
 
 
@@ -707,8 +675,10 @@ def _article_editor_payload(article, article_id: str) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 async def page_index():
-    if os.path.isfile(_PORTAL_INDEX):
-        return FileResponse(_PORTAL_INDEX, media_type="text/html")
+    if is_dev():
+        return RedirectResponse(f"{PORTAL_DEV_URL}/", status_code=307)
+    if os.path.isfile(WEB_INDEX):
+        return FileResponse(WEB_INDEX, media_type="text/html")
     articles = []
     for item in store.list_articles(per_page=20)["items"]:
         article = _load_article(item["id"])
@@ -721,16 +691,23 @@ async def page_index():
 
 @app.get("/studio", response_class=HTMLResponse)
 @app.get("/studio/", response_class=HTMLResponse)
+@app.get("/studio/{rest:path}", response_class=HTMLResponse)
 async def page_studio():
-    if os.path.isfile(_STUDIO_INDEX):
-        return FileResponse(_STUDIO_INDEX, media_type="text/html")
+    if is_dev():
+        return RedirectResponse(f"{STUDIO_DEV_URL}/studio/", status_code=307)
+    if os.path.isfile(WEB_INDEX):
+        return FileResponse(WEB_INDEX, media_type="text/html")
     return RedirectResponse("/?view=library", status_code=307)
+
 
 @app.get("/upload", response_class=HTMLResponse)
 async def page_upload():
-    if os.path.isfile(_PORTAL_INDEX):
+    if is_dev():
+        return RedirectResponse(f"{PORTAL_DEV_URL}/", status_code=307)
+    if os.path.isfile(WEB_INDEX):
         return RedirectResponse("/?view=upload", status_code=307)
     return html_renderer.render_upload(journal_name="学术期刊优化平台")
+
 
 @app.get("/article/{article_id}", response_class=HTMLResponse)
 async def page_article(
@@ -740,22 +717,30 @@ async def page_article(
     font_style: str = Query("academic"),
     font_size: str = Query("medium"),
 ):
-    if os.path.isfile(_PORTAL_INDEX):
+    if is_dev():
         return RedirectResponse(
-            f"/studio/?article={urllib.parse.quote(article_id)}",
+            f"{STUDIO_DEV_URL}/studio/editor?article={urllib.parse.quote(article_id)}",
+            status_code=307,
+        )
+    if os.path.isfile(WEB_INDEX):
+        return RedirectResponse(
+            f"/studio/editor?article={urllib.parse.quote(article_id)}",
             status_code=307,
         )
     article = _load_article(article_id)
     _render_formulas(article_id)
-    article = _load_article(article_id)  # 重新加载（含 SVG 公式）
+    article = _load_article(article_id)
     article.id = article_id
-
     settings = _get_settings(ref_style, two_column, font_style, font_size)
-
     return _render_article_html(article, settings)
+
 
 @app.get("/about", response_class=HTMLResponse)
 async def page_about():
+    if is_dev():
+        return RedirectResponse(f"{PORTAL_DEV_URL}/", status_code=307)
+    if os.path.isfile(WEB_INDEX):
+        return FileResponse(WEB_INDEX, media_type="text/html")
     return html_renderer.render_about(journal_name="学术期刊优化平台")
 
 # ── API 路由 ──────────────────────────────────
@@ -927,10 +912,48 @@ async def api_get_article(article_id: str):
 
 @app.get("/api/articles/{article_id}/editor")
 async def api_get_editor_article(article_id: str):
-    """获取供原版 React 文章编辑器使用的真实结构化数据。"""
+    """获取供原版 React 文章编辑器使用的真实结构化数据。
+    如果有已保存的编辑内容，会合并在解析结果之上。"""
     article = _load_article(article_id)
     article.id = article_id
-    return JSONResponse(_article_editor_payload(article, article_id))
+    payload = _article_editor_payload(article, article_id)
+
+    # 合并已保存的编辑（如果有）
+    edited_path = os.path.join(store.data_dir, f"{article_id}_edited.json")
+    if os.path.isfile(edited_path):
+        try:
+            with open(edited_path, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            if isinstance(saved, dict):
+                saved_paper = saved.get("paper", saved)
+                current_paper = payload.get("paper", {})
+                _deep_merge(current_paper, saved_paper)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    return JSONResponse(payload)
+
+
+@app.put("/api/articles/{article_id}/editor")
+async def api_update_editor_article(article_id: str, paper: dict | None = None):
+    """保存 React 文章编辑器的修改内容。
+    编辑数据存储为 JSON，不影响原始 JATS 解析结果。"""
+    # 验证文章存在
+    try:
+        _load_article(article_id)
+    except HTTPException:
+        raise HTTPException(404, f"文章不存在: {article_id}")
+
+    if not paper:
+        paper = {}
+
+    os.makedirs(store.data_dir, exist_ok=True)
+    edited_path = os.path.join(store.data_dir, f"{article_id}_edited.json")
+    with open(edited_path, "w", encoding="utf-8") as f:
+        json.dump({"paper": paper, "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")},
+                  f, ensure_ascii=False, indent=2)
+
+    return JSONResponse({"status": "ok", "article_id": article_id})
 
 
 @app.get("/api/articles/{article_id}/preview")
@@ -1050,10 +1073,11 @@ async def api_serve_file(
             media_type, _ = mimetypes.guess_type(filepath)
             return FileResponse(filepath, media_type=media_type or "application/octet-stream")
 
-    if re.fullmatch(r"PMC\d+", pmcid.upper()):
+    pmcid_str = str(pmcid) if not isinstance(pmcid, str) else pmcid
+    if re.fullmatch(r"PMC\d+", pmcid_str.upper()):
         cached_path = await asyncio.to_thread(
             _cache_pmc_image,
-            pmcid,
+            pmcid_str,
             safe_name,
         )
         if cached_path:

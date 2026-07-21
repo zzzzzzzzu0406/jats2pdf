@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import { useI18n, LangToggle } from "./i18n";
 import {
   Upload,
   FileText,
@@ -25,7 +27,6 @@ import {
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
-type Lang = "en" | "zh";
 type Columns = 1 | 2;
 
 interface Author {
@@ -448,32 +449,10 @@ const NAV_LINKS = {
   zh: ["首页", "模板库", "功能特性", "定价"],
 };
 
-// ─── lang toggle shared component ────────────────────────────────────────────
-
-function LangToggle({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
-  return (
-    <div className="flex rounded-sm overflow-hidden border border-border shrink-0">
-      {(["en", "zh"] as Lang[]).map((l, i) => (
-        <button
-          key={l}
-          onClick={() => setLang(l)}
-          className={[
-            "px-2.5 py-1 text-xs font-['Inter'] font-medium transition-colors",
-            i > 0 ? "border-l border-border" : "",
-            lang === l ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted",
-          ].join(" ")}
-        >
-          {l === "en" ? "EN" : "中文"}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ─── homepage ─────────────────────────────────────────────────────────────────
 
 function UploadScreen({ onLoad }: { onLoad: () => void }) {
-  const [lang, setLang] = useState<Lang>("zh");
+  const { ui: lang } = useI18n();
   const [dragging, setDragging] = useState(false);
   const [uploaded, setUploaded] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId | null>(null);
@@ -531,7 +510,7 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
           </nav>
 
           <div className="flex items-center gap-2 md:ml-4 ml-auto">
-            <LangToggle lang={lang} setLang={setLang} />
+            <LangToggle />
             <div className="hidden sm:flex items-center gap-1">
               <button className="px-3 py-1.5 text-[11px] font-['Inter'] font-medium text-muted-foreground hover:text-foreground transition-colors">
                 {lang === "zh" ? "登录" : "Login"}
@@ -768,7 +747,7 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
 
           {/* §3 language service */}
           <section>
-            <SectionLabel num="03" lang={lang} en="Language Service" zh="语言服务" />
+            <SectionLabel num="03" lang={lang} en="UiLanguage Service" zh="语言服务" />
             <p className="font-['EB_Garamond'] text-base text-muted-foreground/70 leading-relaxed mb-6 max-w-md italic">
               {lang === "zh"
                 ? "默认处理中文稿件。可选配学术翻译服务，同步生成符合英文期刊投稿规范的双语版本。"
@@ -941,7 +920,7 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
                 {/* language service */}
                 <div>
                   <p className="font-['Inter'] text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 mb-2">
-                    {lang === "zh" ? "语言服务" : "Language Service"}
+                    {lang === "zh" ? "语言服务" : "UiLanguage Service"}
                   </p>
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -1113,7 +1092,7 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
 
 // ─── section label helper ─────────────────────────────────────────────────────
 
-function SectionLabel({ num, en, zh, lang }: { num: string; en: string; zh: string; lang: Lang }) {
+function SectionLabel({ num, en, zh, lang }: { num: string; en: string; zh: string; lang: UiLang }) {
   return (
     <div className="flex items-baseline gap-3 mb-4">
       <span className="font-['Inter'] text-[10px] text-muted-foreground/30 tabular-nums tracking-widest shrink-0 mt-1">
@@ -1133,7 +1112,7 @@ function BlockRenderer({
   lang,
 }: {
   block: ContentBlock;
-  lang: Lang;
+  lang: UiLang;
 }) {
   if (block.type === "para") {
     return (
@@ -1251,7 +1230,8 @@ function PaperViewer({
   onClose: () => void;
 }) {
   const [columns, setColumns] = useState<Columns>(2);
-  const [lang, setLang] = useState<Lang>("en");
+  const [contentLang, setContentLang] = useState<"en" | "zh">("en");
+  const lang = contentLang; const setUiLang = setContentLang;
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState("s1");
   const contentRef = useRef<HTMLDivElement>(null);
@@ -1332,7 +1312,7 @@ function PaperViewer({
           {/* language toggle */}
           <div className="flex rounded-sm overflow-hidden border border-border">
             <button
-              onClick={() => setLang("en")}
+              onClick={() => setUiLang("en")}
               className={[
                 "px-2.5 py-1 text-xs font-['Inter'] font-medium transition-colors",
                 lang === "en" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted",
@@ -1341,7 +1321,7 @@ function PaperViewer({
               EN
             </button>
             <button
-              onClick={() => setLang("zh")}
+              onClick={() => setUiLang("zh")}
               className={[
                 "px-2.5 py-1 text-xs font-['Inter'] font-medium transition-colors border-l border-border",
                 lang === "zh" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted",
@@ -1591,7 +1571,7 @@ function PaperViewer({
 
 // ─── section heading ──────────────────────────────────────────────────────────
 
-function SectionHeading({ section, lang }: { section: Section; lang: Lang }) {
+function SectionHeading({ section, lang }: { section: Section; lang: UiLang }) {
   const label = lang === "zh" ? section.titleZh : `${section.num}. ${section.title}`;
 
   if (section.level === 1) {

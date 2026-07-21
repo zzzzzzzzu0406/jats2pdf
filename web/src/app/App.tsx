@@ -1,4 +1,6 @@
 import { Fragment, createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useI18n, ContentLangToggle, type UiLang, type ContentLang } from "./i18n";
 import {
   Upload, Printer, Globe, Eye, Edit3,
   Plus, Trash2, ChevronDown, ChevronRight, BookOpen,
@@ -1196,8 +1198,9 @@ function TypographyToolbar({
    ═══════════════════════════════════════════════════════════════════════ */
 export default function App() {
   const [paper, setPaper]     = useState<PaperData>(DEMO);
-  const [lang, setLang]       = useState<Lang>("en");
-  const [uiLanguage, setUiLanguage] = useState<UiLanguage>(initialUiLanguage);
+  const { contentLang: lang, setContentLang: setLang } = useI18n();
+  const navigate = useNavigate();
+  const { ui: uiLanguage, setUi: setUiLanguage } = useI18n();
   const [columns, setColumns] = useState<1 | 2>(initialColumns);
   const [typography, setTypography] = useState<TypographySettings>(initialTypography);
   const [tab, setTab]         = useState<EditorTab>("basic");
@@ -1273,7 +1276,7 @@ export default function App() {
           throw new Error(payload.detail || `${response.status} ${response.statusText}`);
         }
         const payload = await response.json();
-        window.history.replaceState({}, "", `/studio/?article=${encodeURIComponent(payload.article_id)}`);
+        window.history.replaceState({}, "", `/studio/editor?article=${encodeURIComponent(payload.article_id)}`);
         await loadBackendArticle(payload.article_id);
       } catch (error) {
         showToast(error instanceof Error ? error.message : String(error), false);
@@ -1399,10 +1402,10 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
           </span>
 
           <div style={{ display: "flex", gap: 2, marginLeft: 8 }}>
-            <button onClick={() => window.location.assign(`/?view=upload&ui_lang=${uiLanguage}`)} style={btnGhost}>
+            <button onClick={() => navigate(`/?view=upload&ui_lang=${uiLanguage}`)} style={btnGhost}>
               <Upload size={12} /> {ui("上传", "Upload")}
             </button>
-            <button onClick={() => window.location.assign(`/?view=library&ui_lang=${uiLanguage}`)} style={btnGhost}>
+            <button onClick={() => navigate(`/?view=library&ui_lang=${uiLanguage}`)} style={btnGhost}>
               <BookOpen size={12} /> {ui("文章库", "Library")}
             </button>
           </div>
@@ -1445,22 +1448,10 @@ ol{font-size:8.5pt;line-height:1.6;padding-left:14pt}
               ))}
             </div>
 
-            {/* 论文内容语言：只影响论文正文，不改变界面语言。 */}
+            {/* 论文内容语言：影响预览正文 + 全局同步 */}
             <div title={ui("论文内容语言", "Paper content language")} style={{ display: "flex", gap: 1, padding: 2, backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 2 }}>
               <Globe size={12} style={{ color: "rgba(255,255,255,0.4)", margin: "auto 4px" }} />
-              {(["en", "zh", "both"] as Lang[]).map((l) => {
-                const lbl: Record<Lang, string> = {
-                  en: ui("英文", "English"),
-                  zh: ui("中文", "Chinese"),
-                  both: ui("双语", "Bilingual"),
-                };
-                return (
-                  <button key={l} onClick={() => setLang(l)}
-                    style={{ padding: "4px 8px", fontSize: "0.7rem", fontFamily: SANS, fontWeight: lang === l ? 600 : 400, border: "none", borderRadius: 2, cursor: "pointer", backgroundColor: lang === l ? "rgba(255,255,255,0.25)" : "transparent", color: lang === l ? "#fff" : "rgba(255,255,255,0.5)" }}>
-                    {lbl[l]}
-                  </button>
-                );
-              })}
+              <ContentLangToggle />
             </div>
 
             {/* export */}

@@ -14,8 +14,7 @@
 - 双栏样式参考《计算机学报》：标题/作者/摘要通栏，正文双栏，图表默认栏内排版。
 - PDF 导出前自动嵌入、旋转校正和压缩图片，避免远程图片缺失或超大图片拖慢渲染。
 - 完整文章工作台支持编辑基础信息、摘要、关键词、章节、图表和参考文献，并可切换中英预览、单双栏、PDF 打印和 Word 导出。
-
-> 当前工作台编辑内容保存在浏览器内存中，尚未提供 PUT/PATCH 接口持久化修改。门户的后端 PDF 与工作台的浏览器打印是两条独立导出链路。
+- 工作台编辑内容可通过 `PUT /api/articles/{id}/editor` 持久化保存，支持跨会话恢复。
 
 ## 系统架构
 
@@ -42,17 +41,38 @@ WeasyPrint 无法加载时，`PDFRenderer` 会尝试使用 Chrome、Edge、Brave
 
 ## 安装与运行
 
+### 开发模式（推荐日常开发使用）
+
+开发模式下前端由 Vite 开发服务器提供，支持热更新（HMR），修改代码立即生效。
+
 ```bash
-# Python
+# 1. Python 依赖
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 
-# 前端
+# 2. 前端依赖
 npm run web:install
-npm run web:build
 
-# 启动统一服务
+# 3. 启动后端（开发模式）
+JATS2PDF_DEV=true python -m src.server
+
+# 4. 另开终端，启动前端 dev server
+npm run web:dev
+```
+
+打开：
+
+- 门户与文章库：http://127.0.0.1:5173/
+- 文章编辑工作台：http://127.0.0.1:5174/
+- API 健康检查：http://127.0.0.1:8000/api/health
+
+开发模式下 Vite 自动把 `/api` 请求代理到后端 8000 端口，API 调用透明无感。
+
+### 生产模式（部署/演示）
+
+```bash
+npm run web:build
 python -m src.server
 ```
 
@@ -62,18 +82,16 @@ python -m src.server
 - 文章编辑工作台：http://127.0.0.1:8000/studio/
 - 健康检查：http://127.0.0.1:8000/api/health
 
-### 单端口运行说明
+生产模式下，门户、文章库、编辑工作台和全部 API 均由 `http://127.0.0.1:8000/` 提供；页面之间通过顶部导航切换。
 
-项目的默认运行方式只有一个端口：
+### 开发模式 vs 生产模式对照
 
-```bash
-npm run web:build
-.venv/bin/python -m src.server
-```
-
-门户、文章库、编辑工作台和全部 API 均由 `http://127.0.0.1:8000/` 提供；页面之间通过顶部导航切换，不需要分别启动两个前端服务。
-
-`npm run portal:dev` 和 `npm run studio:dev` 仅用于前端开发人员临时启用 Vite 热更新，会占用 `5173/5174`，不属于项目的正常启动或交付方式。
+| | 开发模式 | 生产模式 |
+|---|---|---|
+| 环境变量 | `JATS2PDF_DEV=true` | 默认 |
+| 前端服务 | Vite dev server (HMR) | 预构建 dist/ 静态文件 |
+| 端口 | 5173 / 5174 / 8000 | 仅 8000 |
+| 适用场景 | 日常开发、调试 | 部署、演示 |
 
 ## 公式渲染
 
@@ -86,36 +104,14 @@ npm install --prefix ~/mjnode mathjax-node@2.1.1
 
 也可以用 `JATS2PDF_MJDIR` 指定安装目录。未安装时，公式会回退为原始 MathML/文本。
 
-## 命令行使用
-
-```bash
-# 默认 PDF
-.venv/bin/python -m src.main samples/sample1.xml -o output.pdf
-
-# 双栏 + GB/T 7714
-.venv/bin/python -m src.main samples/sample1.xml \
-  --two-column \
-  --ref-style gbt7714 \
-  -o output.pdf
-
-# 仅生成中间 HTML
-.venv/bin/python -m src.main samples/sample1.xml \
-  --html \
-  --html-output debug.html
-
-# 不执行公式预渲染
-.venv/bin/python -m src.main samples/sample1.xml \
-  --no-render-formulas \
-  -o output.pdf
-```
-
 ## 常用 API
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `POST` | `/api/upload` | 上传 JATS XML 或 XML+图片 ZIP |
 | `GET` | `/api/articles` | 文章列表、搜索、分页和筛选 |
-| `GET` | `/api/articles/{id}/editor` | 编辑器结构化数据 |
+| `GET` | `/api/articles/{id}/editor` | 编辑器结构化数据（含已保存编辑） |
+| `PUT` | `/api/articles/{id}/editor` | 保存编辑器修改 |
 | `GET` | `/api/articles/{id}/preview` | 自包含 HTML 预览 |
 | `GET` | `/api/articles/{id}/html` | 下载 HTML |
 | `GET` | `/api/articles/{id}/pdf` | 生成并下载后端 PDF |
@@ -127,21 +123,22 @@ npm install --prefix ~/mjnode mathjax-node@2.1.1
 ```text
 .
 ├── src/
-│   ├── parser/jats_parser.py       # JATS 解析与数据模型
-│   ├── renderer/                   # HTML、PDF、公式渲染
-│   ├── templates/                  # CLI、预览与回退页面模板
-│   ├── server.py                   # FastAPI 页面与 API
-│   └── store.py                    # SQLite / pickle 文章存储
+│   ├── config.py                     # 全局配置（路径、开发/生产模式）
+│   ├── jinja_env.py                  # 统一 Jinja2 环境
+│   ├── parser/jats_parser.py         # JATS 解析与数据模型
+│   ├── renderer/                     # HTML、PDF、公式渲染
+│   ├── templates/                    # CLI、预览与回退页面模板
+│   ├── server.py                     # FastAPI 页面与 API
+│   └── store.py                      # SQLite / pickle 文章存储
 ├── web/
-│   ├── upload/                     # React 上传门户与文章库
-│   └── article/                    # React 文章编辑工作台
-├── assets/                         # Jinja 回退页面静态资源
-├── samples/                        # 示例与真实 JATS XML
-├── tests/                          # Python 单元与集成测试
-├── build_site.py                   # 可选的旧版静态站构建器
-├── requirements.txt               # Python 运行依赖
-├── requirements-dev.txt           # 测试与格式化工具
-└── 技术栈.md                       # 架构和技术选型详情
+│   ├── upload/                       # React 上传门户与文章库
+│   └── article/                      # React 文章编辑工作台
+├── assets/                           # Jinja 回退页面静态资源
+├── samples/                          # 示例与真实 JATS XML
+├── tests/                            # Python 单元与集成测试
+├── requirements.txt                  # Python 运行依赖
+├── requirements-dev.txt              # 测试与格式化工具
+└── 技术栈.md                          # 架构和技术选型详情
 ```
 
 `data/` 保存真实文章库和上传图片，属于运行数据，不应作为缓存删除。`dist/`、`samples/output/`、`tmp/`、`output/` 等生成目录已加入 `.gitignore`。

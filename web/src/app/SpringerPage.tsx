@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useI18n, ContentLangToggle } from "./i18n";
 import { SPRINGER_DEMO, type SpringerPaperData, type SpringerSection } from "./demoSpringer";
 import {
   JournalEditorShell, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
@@ -225,6 +226,7 @@ function SpringerSectionCard({ sec, onUpdate, onDelete }: {
    SPRINGER PAGE
    ═══════════════════════════════════════════════════════════════════════ */
 export function SpringerPage() {
+  const { contentLang: lang, setContentLang: setLang, ui } = useI18n();
   const [paper, setPaper] = useState<SpringerPaperData>(SPRINGER_DEMO);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [fontSize, setFontSize] = useState(SPRINGER_DEMO.fontSize);
@@ -561,11 +563,13 @@ export function SpringerPage() {
       )}
 
       <JournalEditorShell
+        uiLang={ui}
         journal={{ name: "Machine Learning", abbrev: "Mach Learn", publisher: "Springer", accentColor: SPRINGER_BLUE, type: "springer" }}
         actions={{ onExportPDF: () => window.print(), onExportWord: exportWord, onUpload: handleUpload }}
         tabContent={{ metadata: metadataPanel, content: contentPanel, figures: figuresPanel, references: referencesPanel, layout: layoutTabPanel, export: exportTabPanel }}
         preview={<SpringerPreview paper={paper} fontSize={fontSize} lineSpacing={lineSpacing} />}
         rightPanelSections={{ layout: rpLayout, typography: rpTypography, contentStyle: rpContentStyle, figuresTables: rpFiguresTables, export: rpExport, documentInfo: rpDocumentInfo }}
+        langToggle={{ lang, onChange: setLang }}
       />
     </>
   );

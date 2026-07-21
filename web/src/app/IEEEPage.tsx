@@ -1,5 +1,6 @@
 import React, { useState, useRef } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, AlertCircle, CheckCircle2, FunctionSquare } from "lucide-react";
+import { useI18n, ContentLangToggle } from "./i18n";
 import { IEEE_DEMO, type IEEEPaperData, type IEEESection } from "./demoIEEE";
 import {
   JournalEditorShell, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
@@ -198,6 +199,7 @@ function IEEESectionCard({ sec, onUpdate, onDelete }: {
    IEEE PAGE
    ═══════════════════════════════════════════════════════════════════════ */
 export function IEEEPage() {
+  const { contentLang: lang, setContentLang: setLang, ui } = useI18n();
   const [paper, setPaper] = useState<IEEEPaperData>(IEEE_DEMO);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
@@ -542,6 +544,7 @@ export function IEEEPage() {
       )}
 
       <JournalEditorShell
+        uiLang={ui}
         journal={{
           name: "IEEE Transactions on Neural Networks and Learning Systems",
           abbrev: "IEEE TRANS. NEURAL NETW. LEARN. SYST.",
@@ -572,6 +575,7 @@ export function IEEEPage() {
           export:        rpExport,
           documentInfo:  rpDocumentInfo,
         }}
+        langToggle={{ lang, onChange: setLang }}
       />
     </>
   );

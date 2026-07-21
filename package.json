@@ -4,15 +4,18 @@
   "private": true,
   "description": "JATS XML article management, editing, preview and PDF typesetting platform",
   "scripts": {
-    "web:install": "npm --prefix web/upload ci && npm --prefix web/article ci",
-    "portal:dev": "npm --prefix web/upload run dev",
-    "portal:build": "npm --prefix web/upload run build",
-    "studio:dev": "npm --prefix web/article run dev",
-    "studio:build": "npm --prefix web/article run build",
-    "web:build": "npm run portal:build && npm run studio:build"
+    "web:install": "npm --prefix web ci",
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "web:build": "npm --prefix web run build",
+    "typecheck": "npm --prefix web run typecheck",
+    "clean": "npm --prefix web run clean"
   },
   "engines": {
     "node": ">=20",
     "npm": ">=10"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
   }
 }

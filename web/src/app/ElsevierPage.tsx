@@ -8,7 +8,8 @@ import {
 } from "./shell/JournalEditorShell";
 
 /* ─── local types ─────────────────────────────────────────────────── */
-type Lang = "en" | "zh" | "both";
+import { useI18n, ContentLangToggle, type ContentLang } from "./i18n";
+type Lang = ContentLang;
 
 function bi(o: { en: string; zh: string }, lang: Lang) {
   return lang === "en" ? o.en : o.zh;
@@ -250,7 +251,7 @@ function SectionCard({ sec, onUpdate, onDelete }: {
    ═══════════════════════════════════════════════════════════════════════ */
 export function ElsevierPage() {
   const [paper, setPaper] = useState<PaperData>(DEMO);
-  const [lang, setLang]   = useState<Lang>("en");
+  const { contentLang: lang, setContentLang: setLang, ui } = useI18n();
   const [columns, setColumns] = useState<1 | 2>(2);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
@@ -444,16 +445,8 @@ export function ElsevierPage() {
         ))}
       </div>
       <SectionLabel>Language</SectionLabel>
-      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        {(["en", "zh", "both"] as Lang[]).map((l) => {
-          const lbl = { en: "English", zh: "中文", both: "Bilingual 双语" };
-          return (
-            <button key={l} onClick={() => setLang(l)}
-              style={{ flex: 1, padding: "6px 6px", fontSize: "0.7rem", fontFamily: SANS, fontWeight: lang === l ? 700 : 400, border: `1px solid ${lang === l ? "#c0392b" : BORDER}`, borderRadius: 3, backgroundColor: lang === l ? "rgba(192,57,43,0.06)" : PANEL_BG, color: lang === l ? "#c0392b" : TEXT, cursor: "pointer" }}>
-              {lbl[l]}
-            </button>
-          );
-        })}
+      <div style={{ marginBottom: 14 }}>
+        <ContentLangToggle style={{ display: "flex", gap: 6 }} />
       </div>
     </div>
   );
@@ -517,16 +510,8 @@ export function ElsevierPage() {
   const rpContentStyle = (
     <div>
       <div style={{ fontFamily: SANS, fontSize: "0.72rem", color: TEXT, marginBottom: 5 }}>Language</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
-        {(["en", "zh", "both"] as Lang[]).map((l) => {
-          const lbl = { en: "English only", zh: "中文 only", both: "Bilingual (双语)" };
-          return (
-            <button key={l} onClick={() => setLang(l)}
-              style={{ padding: "5px 8px", textAlign: "left", fontSize: "0.72rem", fontFamily: SANS, fontWeight: lang === l ? 700 : 400, border: `1px solid ${lang === l ? acRight : BORDER}`, borderRadius: 3, backgroundColor: lang === l ? "rgba(192,57,43,0.06)" : "#f9fafb", color: lang === l ? acRight : TEXT, cursor: "pointer" }}>
-              {lbl[l]}
-            </button>
-          );
-        })}
+      <div style={{ marginBottom: 10 }}>
+        <ContentLangToggle />
       </div>
       <ChoiceRow label="Citation style"
         options={[{ value: "numbered", label: "[1] Numbered" }, { value: "author", label: "Author-date" }]}
@@ -614,6 +599,7 @@ export function ElsevierPage() {
       )}
 
       <JournalEditorShell
+        uiLang={ui}
         journal={{
           name: "Expert Systems with Applications",
           abbrev: "ESWA",

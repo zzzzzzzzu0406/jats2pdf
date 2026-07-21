@@ -6,63 +6,19 @@ HTML 渲染器 v3.0：支持多页面平台渲染
 """
 
 import os
-import re
-import urllib.parse
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, pass_context, select_autoescape
+from ..jinja_env import get_jinja_env
 from ..parser.jats_parser import Article
 
-_TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "assets")
 
 
 class HTMLRenderer:
     """多页面平台渲染器"""
 
-    def __init__(self, template_dir: str = _TEMPLATE_DIR):
-        self.template_dir = template_dir
-        self.env = Environment(
-            loader=FileSystemLoader(template_dir),
-            autoescape=select_autoescape(enabled_extensions=("html", "xml")),
-            trim_blocks=True,
-            lstrip_blocks=True,
-        )
-        self.env.filters["orcid_url"] = lambda o: f"https://orcid.org/{o}" if o else "#"
-
-        @pass_context
-        def _resolve_image(context, href: str) -> str:
-            if not href:
-                return href
-            if href.startswith("data:"):
-                return href
-            if href.startswith(("http://", "https://", "//")):
-                return href if context.get("allow_remote_assets", False) else ""
-
-            asset_mode = context.get("asset_mode", "local")
-            asset_base = context.get("asset_base")
-            if asset_mode == "local" and asset_base:
-                base = Path(asset_base).resolve()
-                candidate = (base / href).resolve()
-                if candidate.is_file() and (candidate == base or base in candidate.parents):
-                    return candidate.as_uri()
-                return href
-
-            safe = os.path.basename(href)
-            if asset_mode == "web" and safe:
-                article = context.get("article")
-                pmcid = str(getattr(article, "pmcid", "") or "").upper()
-                article_id = str(getattr(article, "id", "") or "")
-                params = {}
-                if re.fullmatch(r"[0-9a-f]{8}", article_id):
-                    params["article_id"] = article_id
-                if re.fullmatch(r"PMC\d+", pmcid):
-                    params["pmcid"] = pmcid
-                suffix = f"?{urllib.parse.urlencode(params)}" if params else ""
-                return f"/api/files/{safe}{suffix}"
-            return href
-
-        self.env.filters["resolve_image"] = _resolve_image
+    def __init__(self, template_dir: str | None = None):
+        self.env = get_jinja_env()
 
     def _read_css(self) -> str:
         """读取 platform.css"""

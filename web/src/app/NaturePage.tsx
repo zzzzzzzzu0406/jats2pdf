@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useI18n, ContentLangToggle } from "./i18n";
 import { NATURE_DEMO, type NaturePaperData, type NatureSection } from "./demoNature";
 import {
   JournalEditorShell, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
@@ -233,6 +234,7 @@ function NatureSectionCard({ sec, onUpdate, onDelete }: {
    NATURE PAGE
    ═══════════════════════════════════════════════════════════════════════ */
 export function NaturePage() {
+  const { contentLang: lang, setContentLang: setLang, ui } = useI18n();
   const [paper, setPaper] = useState<NaturePaperData>(NATURE_DEMO);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [fontSize, setFontSize] = useState(NATURE_DEMO.fontSize);
@@ -569,11 +571,13 @@ export function NaturePage() {
       )}
 
       <JournalEditorShell
+        uiLang={ui}
         journal={{ name: "Nature", abbrev: "Nature", publisher: "Springer Nature", accentColor: NATURE_RED, type: "nature" }}
         actions={{ onExportPDF: () => window.print(), onExportWord: exportWord, onUpload: handleUpload }}
         tabContent={{ metadata: metadataPanel, content: contentPanel, figures: figuresPanel, references: referencesPanel, layout: layoutTabPanel, export: exportTabPanel }}
         preview={<NaturePreview paper={paper} fontSize={fontSize} lineSpacing={lineSpacing} />}
         rightPanelSections={{ layout: rpLayout, typography: rpTypography, contentStyle: rpContentStyle, figuresTables: rpFiguresTables, export: rpExport, documentInfo: rpDocumentInfo }}
+        langToggle={{ lang, onChange: setLang }}
       />
     </>
   );
