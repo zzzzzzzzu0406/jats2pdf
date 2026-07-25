@@ -68,7 +68,10 @@ export function LangToggle({ style }: { style?: React.CSSProperties }) {
   const { ui, setUi } = useI18n();
   const btn = (label: string, lang: UiLang) => (
     <button
+      type="button"
       onClick={() => setUi(lang)}
+      aria-pressed={ui === lang}
+      aria-label={lang === "zh" ? "Use Chinese interface" : "Use English interface"}
       style={{
         fontFamily: "'Inter', system-ui, sans-serif",
         fontSize: "0.68rem",
@@ -102,7 +105,10 @@ export function ContentLangToggle({ style }: { style?: React.CSSProperties }) {
       {(["en", "zh", "both"] as ContentLang[]).map((l) => (
         <button
           key={l}
+          type="button"
           onClick={() => setContentLang(l)}
+          aria-pressed={contentLang === l}
+          aria-label={contentLabel(l)}
           style={{
             fontFamily: "'Inter', system-ui, sans-serif",
             fontSize: "0.65rem",
