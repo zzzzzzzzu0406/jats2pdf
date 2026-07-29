@@ -1,15 +1,24 @@
 import React, { useState, useRef, useCallback } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, AlignLeft, Columns, AlertCircle, CheckCircle2 } from "lucide-react";
 import type { PaperData, Section } from "./types";
+import { escapeXml } from "./xml";
 import { DEMO } from "./demo";
+import { JournalFigureMedia } from "./JournalFigureMedia";
 import {
-  JournalEditorShell, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
+  JournalEditorShell, JournalColumns, getJournalPageLayout, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
   FieldInput, FieldTextarea, SectionLabel, SliderField, ChoiceRow, ExportPanel,
 } from "./shell/JournalEditorShell";
 
 /* ─── local types ─────────────────────────────────────────────────── */
 import { useI18n, ContentLangToggle, type ContentLang } from "./i18n";
 type Lang = ContentLang;
+
+type MarginSize = "narrow" | "normal" | "wide";
+type PageSize = "a4" | "letter";
+type FontFamily = "times" | "garamond" | "charter";
+type HeadingStyle = "bold" | "italic" | "caps";
+type FigurePosition = "inline" | "top" | "bottom";
+type CaptionStyle = "below" | "above";
 
 function bi(o: { en: string; zh: string }, lang: Lang) {
   return lang === "en" ? o.en : o.zh;
@@ -18,17 +27,29 @@ function bi(o: { en: string; zh: string }, lang: Lang) {
 /* ═══════════════════════════════════════════════════════════════════════
    ELSEVIER ESWA PREVIEW  (untouched layout logic)
    ═══════════════════════════════════════════════════════════════════════ */
-function Preview({ paper, lang, columns }: {
+function Preview({ paper, lang, columns, marginSize, pageSize, fontFamily, fontSize, lineSpacing, headingStyle, figurePosition, tablePosition, captionStyle, citationStyle }: {
   paper: PaperData;
   lang: Lang;
   columns: 1 | 2;
+  marginSize: MarginSize;
+  pageSize: PageSize;
+  fontFamily: FontFamily;
+  fontSize: number;
+  lineSpacing: number;
+  headingStyle: HeadingStyle;
+  figurePosition: FigurePosition;
+  tablePosition: FigurePosition;
+  captionStyle: CaptionStyle;
+  citationStyle: "numbered" | "author";
 }) {
   const showEn = lang === "en" || lang === "both";
   const showZh = lang === "zh" || lang === "both";
   const bil    = lang === "both";
+  const fontFamilyCss = fontFamily === "garamond" ? "'EB Garamond', Georgia, serif" : fontFamily === "charter" ? "Charter, Georgia, serif" : SERIF;
+  const marginPx = marginSize === "narrow" ? 28 : marginSize === "wide" ? 60 : 44;
 
   return (
-    <div id="preview-root" style={{ fontFamily: SERIF, backgroundColor: "#fff", color: "#111", fontSize: "9.5pt", lineHeight: 1.55, padding: "36px 44px" }}>
+    <div id="preview-root" style={{ fontFamily: fontFamilyCss, backgroundColor: "#fff", color: "#111", fontSize: `${fontSize}pt`, lineHeight: lineSpacing, padding: `36px ${marginPx}px`, minHeight: pageSize === "a4" ? 1120 : 1056, boxSizing: "border-box" }}>
 
       {/* journal header */}
       <div style={{ borderTop: "3px solid #c0392b", borderBottom: "1px solid #ddd", padding: "6px 0 5px", marginBottom: 14 }}>
@@ -100,9 +121,9 @@ function Preview({ paper, lang, columns }: {
         <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "8pt", color: "#333", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           {showZh ? (bil ? "Abstract · 摘要" : "摘要") : "Abstract"}
         </div>
-        {showZh && <p style={{ margin: "0 0 6px", fontFamily: SERIF, fontSize: "9pt", textAlign: "justify", lineHeight: 1.6 }}>{paper.abstract.zh}</p>}
+        {showZh && <p style={{ margin: "0 0 6px", fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, textAlign: "justify", lineHeight: lineSpacing }}>{paper.abstract.zh}</p>}
         {bil && <hr style={{ border: "none", borderTop: "1px dashed #ddd", margin: "6px 0" }} />}
-        {showEn && <p style={{ margin: "0 0 8px", fontFamily: SERIF, fontSize: "9pt", textAlign: "justify", lineHeight: 1.6, fontStyle: bil ? "italic" : "normal", color: bil ? "#555" : "#111" }}>{paper.abstract.en}</p>}
+        {showEn && <p style={{ margin: "0 0 8px", fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, textAlign: "justify", lineHeight: lineSpacing, fontStyle: bil ? "italic" : "normal", color: bil ? "#555" : "#111" }}>{paper.abstract.en}</p>}
         <div style={{ fontFamily: SANS, fontSize: "8pt", lineHeight: 1.7 }}>
           <span style={{ fontWeight: 600 }}>Keywords{showZh ? " / 关键词" : ""}:</span>{" "}
           {(showZh ? paper.keywords.zh : paper.keywords.en).join("; ")}
@@ -111,35 +132,38 @@ function Preview({ paper, lang, columns }: {
       </div>
 
       {/* body */}
-      <div style={{ columns: columns === 2 ? 2 : 1, columnGap: "1.8em", columnRule: columns === 2 ? "1px solid #e0e0e0" : undefined }}>
+      <JournalColumns columns={columns}>
         {paper.sections.map((sec, si) => (
           <div key={sec.id} style={{ breakInside: "avoid-column", marginBottom: "0.5em" }}>
-            <h2 style={{ fontFamily: SANS, fontWeight: 700, fontSize: "9.5pt", color: "#111", margin: "12px 0 5px", paddingBottom: 3, borderBottom: "1px solid #ddd" }}>
+            <h2 style={{ fontFamily: SANS, fontWeight: headingStyle === "italic" ? 600 : 700, fontStyle: headingStyle === "italic" ? "italic" : "normal", textTransform: headingStyle === "caps" ? "uppercase" : "none", fontSize: `${fontSize}pt`, color: "#111", margin: "12px 0 5px", paddingBottom: 3, borderBottom: "1px solid #ddd" }}>
               {bil ? `${sec.number}. ${sec.title.zh} / ${sec.title.en}` : `${sec.number}. ${bi(sec.title, lang)}`}
             </h2>
             {(showZh ? sec.content.zh : sec.content.en).split("\n\n").filter(Boolean).map((para, pi) => (
-              <p key={pi} style={{ margin: "0 0 6px", textAlign: "justify", fontFamily: SERIF, fontSize: "9.5pt", lineHeight: 1.6, textIndent: "1.2em" }}>{para.trim()}</p>
+              <p key={pi} style={{ margin: "0 0 6px", textAlign: "justify", fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, lineHeight: lineSpacing, textIndent: "1.2em" }}>{para.trim()}</p>
             ))}
             {bil && sec.content.en !== sec.content.zh && (
               <div style={{ borderLeft: "2px solid #e8e8e8", paddingLeft: 8, marginBottom: 4 }}>
                 {sec.content.en.split("\n\n").filter(Boolean).map((para, pi) => (
-                  <p key={pi} style={{ margin: "0 0 5px", textAlign: "justify", fontFamily: SERIF, fontSize: "8.8pt", lineHeight: 1.55, color: "#555", fontStyle: "italic", textIndent: "1.2em" }}>{para.trim()}</p>
+                  <p key={pi} style={{ margin: "0 0 5px", textAlign: "justify", fontFamily: fontFamilyCss, fontSize: `${Math.max(fontSize - 0.7, 7)}pt`, lineHeight: Math.max(lineSpacing - 0.05, 1), color: "#555", fontStyle: "italic", textIndent: "1.2em" }}>{para.trim()}</p>
                 ))}
               </div>
             )}
-            {paper.figures[si] && (
-              <figure style={{ breakInside: "avoid", margin: "10px 0", textAlign: "center" }}>
-                <div style={{ backgroundColor: paper.figures[si].placeholder, border: "1px solid #ddd", padding: "22px 12px", fontSize: "8pt", fontFamily: SANS, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 90 }}>
-                  [Fig. {paper.figures[si].number}]
-                </div>
+            {figurePosition === "inline" && paper.figures[si] && (
+              <figure style={{ breakInside: "avoid", margin: "10px 0", textAlign: "center", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+                <JournalFigureMedia
+                  src={paper.figures[si].src}
+                  alt={bi(paper.figures[si].caption, lang)}
+                  placeholder={paper.figures[si].placeholder}
+                  fallbackLabel={`Figure ${paper.figures[si].number} unavailable`}
+                />
                 <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#444", marginTop: 5, lineHeight: 1.5, textAlign: "left" }}>
                   <strong>Fig. {paper.figures[si].number}.</strong>{" "}
                   {bil ? `${paper.figures[si].caption.zh} / ${paper.figures[si].caption.en}` : bi(paper.figures[si].caption, lang)}
                 </figcaption>
               </figure>
             )}
-            {paper.tables[si] && (
-              <figure style={{ breakInside: "avoid", margin: "10px 0" }}>
+            {tablePosition === "inline" && paper.tables[si] && (
+              <figure style={{ breakInside: "avoid", margin: "10px 0", display: "flex", flexDirection: captionStyle === "above" ? "column" : "column-reverse" }}>
                 <figcaption style={{ fontFamily: SANS, fontSize: "8pt", fontWeight: 600, color: "#444", marginBottom: 4 }}>
                   Table {paper.tables[si].number}.{" "}
                   <span style={{ fontWeight: 400 }}>{bil ? `${paper.tables[si].caption.zh} / ${paper.tables[si].caption.en}` : bi(paper.tables[si].caption, lang)}</span>
@@ -164,16 +188,21 @@ function Preview({ paper, lang, columns }: {
             )}
           </div>
         ))}
-        {paper.figures.slice(paper.sections.length).map((fig) => (
-          <figure key={fig.id} style={{ breakInside: "avoid", margin: "10px 0", textAlign: "center" }}>
-            <div style={{ backgroundColor: fig.placeholder, border: "1px solid #ddd", padding: "22px 12px", fontSize: "8pt", fontFamily: SANS, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 90 }}>[Fig. {fig.number}]</div>
+        {(figurePosition === "inline" ? paper.figures.slice(paper.sections.length) : paper.figures).map((fig) => (
+          <figure key={fig.id} style={{ breakInside: "avoid", margin: "10px 0", textAlign: "center", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+            <JournalFigureMedia
+              src={fig.src}
+              alt={bi(fig.caption, lang)}
+              placeholder={fig.placeholder}
+              fallbackLabel={`Figure ${fig.number} unavailable`}
+            />
             <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#444", marginTop: 5, lineHeight: 1.5, textAlign: "left" }}>
               <strong>Fig. {fig.number}.</strong>{" "}{bil ? `${fig.caption.zh} / ${fig.caption.en}` : bi(fig.caption, lang)}
             </figcaption>
           </figure>
         ))}
-        {paper.tables.slice(paper.sections.length).map((tbl) => (
-          <figure key={tbl.id} style={{ breakInside: "avoid", margin: "10px 0" }}>
+        {(tablePosition === "inline" ? paper.tables.slice(paper.sections.length) : paper.tables).map((tbl) => (
+          <figure key={tbl.id} style={{ breakInside: "avoid", margin: "10px 0", display: "flex", flexDirection: captionStyle === "above" ? "column" : "column-reverse" }}>
             <figcaption style={{ fontFamily: SANS, fontSize: "8pt", fontWeight: 600, color: "#444", marginBottom: 4 }}>
               Table {tbl.number}. <span style={{ fontWeight: 400 }}>{bil ? `${tbl.caption.zh} / ${tbl.caption.en}` : bi(tbl.caption, lang)}</span>
             </figcaption>
@@ -193,16 +222,21 @@ function Preview({ paper, lang, columns }: {
             </table>
           </figure>
         ))}
-      </div>
+      </JournalColumns>
 
       {/* references */}
       <div style={{ marginTop: 14, paddingTop: 8, borderTop: "2px solid #111" }}>
         <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "9pt", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           References{showZh ? " / 参考文献" : ""}
         </div>
-        <ol style={{ margin: 0, paddingLeft: 18, fontFamily: SANS, fontSize: "8pt", lineHeight: 1.65, color: "#333" }}>
-          {paper.references.map((ref, i) => <li key={i} style={{ marginBottom: 3 }}>{ref}</li>)}
-        </ol>
+        <JournalColumns columns={columns}>
+          {paper.references.map((ref, i) => (
+            <div key={i} style={{ fontFamily: SANS, fontSize: `${Math.max(fontSize - 1.5, 7)}pt`, lineHeight: lineSpacing, color: "#333", marginBottom: 3, paddingLeft: 18, position: "relative" }}>
+              <span style={{ position: "absolute", left: 0, fontWeight: 700 }}>{i + 1}.</span>
+              {citationStyle === "author" ? ref.replace(/^\s*\[?\d+\]?\.?\s*/, "") : ref.replace(/^\s*\[?\d+\]?\.?\s*/, "")}
+            </div>
+          ))}
+        </JournalColumns>
       </div>
 
       {/* footer */}
@@ -253,6 +287,16 @@ export function ElsevierPage() {
   const [paper, setPaper] = useState<PaperData>(DEMO);
   const { contentLang: lang, setContentLang: setLang, ui } = useI18n();
   const [columns, setColumns] = useState<1 | 2>(2);
+  const [marginSize, setMarginSize] = useState<MarginSize>("normal");
+  const [pageSize, setPageSize] = useState<PageSize>("a4");
+  const [fontFamily, setFontFamily] = useState<FontFamily>("times");
+  const [fontSize, setFontSize] = useState(10);
+  const [lineSpacing, setLineSpacing] = useState(1.55);
+  const [citationStyle, setCitationStyle] = useState<"numbered" | "author">("numbered");
+  const [headingStyle, setHeadingStyle] = useState<HeadingStyle>("bold");
+  const [figurePosition, setFigurePosition] = useState<FigurePosition>("inline");
+  const [tablePosition, setTablePosition] = useState<FigurePosition>("inline");
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("below");
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   const set = useCallback((patch: Partial<PaperData>) => setPaper((p) => ({ ...p, ...patch })), []);
@@ -395,9 +439,10 @@ export function ElsevierPage() {
           </div>
           <FieldInput label="Caption (EN)" value={fig.caption.en} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, caption: { ...fig.caption, en: v } }; set({ figures }); }} />
           <FieldInput label="Caption (中文)" value={fig.caption.zh} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, caption: { ...fig.caption, zh: v } }; set({ figures }); }} />
+          <FieldInput label="Image URL" value={fig.src || ""} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, src: v }; set({ figures }); }} mono />
         </div>
       ))}
-      <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, caption: { en: "", zh: "" }, placeholder: "#dbeafe" }] })}
+      <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, caption: { en: "", zh: "" }, placeholder: "#dbeafe", src: "" }] })}
         style={{ fontFamily: SANS, fontSize: "0.72rem", display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", border: `1px solid ${BORDER}`, borderRadius: 3, backgroundColor: PANEL_BG, color: TEXT, cursor: "pointer", marginBottom: 16 }}>
         <Plus size={12} /> Add Figure
       </button>
@@ -458,7 +503,7 @@ export function ElsevierPage() {
       onPDF={() => window.print()}
       onWord={exportWord}
       onXML={() => {
-        const blob = new Blob([`<?xml version="1.0"?>\n<article><title>${paper.title.en}</title></article>`], { type: "application/xml" });
+        const blob = new Blob([`<?xml version="1.0"?>\n<article><title>${escapeXml(paper.title.en)}</title></article>`], { type: "application/xml" });
         Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "article.xml" }).click();
       }}
       onDocx={exportWord}
@@ -484,13 +529,13 @@ export function ElsevierPage() {
       />
       <ChoiceRow label="Margins"
         options={[{ value: "narrow", label: "Narrow" }, { value: "normal", label: "Normal" }, { value: "wide", label: "Wide" }]}
-        value="normal"
-        onChange={() => {}}
+        value={marginSize}
+        onChange={(v) => setMarginSize(v as MarginSize)}
       />
       <ChoiceRow label="Page size"
         options={[{ value: "a4", label: "A4" }, { value: "letter", label: "Letter" }]}
-        value="a4"
-        onChange={() => {}}
+        value={pageSize}
+        onChange={(v) => setPageSize(v as PageSize)}
       />
     </div>
   );
@@ -499,11 +544,11 @@ export function ElsevierPage() {
     <div>
       <ChoiceRow label="Font family"
         options={[{ value: "times", label: "Times New Roman" }, { value: "garamond", label: "EB Garamond" }, { value: "charter", label: "Charter" }]}
-        value="times"
-        onChange={() => {}}
+        value={fontFamily}
+        onChange={(v) => setFontFamily(v as FontFamily)}
       />
-      <SliderField label="Font size" value={10} min={8} max={13} step={0.5} unit="pt" onChange={() => {}} />
-      <SliderField label="Line spacing" value={1.55} min={1} max={2} step={0.05} onChange={() => {}} />
+      <SliderField label="Font size" value={fontSize} min={8} max={13} step={0.5} unit="pt" onChange={setFontSize} />
+      <SliderField label="Line spacing" value={lineSpacing} min={1} max={2} step={0.05} unit="" onChange={setLineSpacing} />
     </div>
   );
 
@@ -515,13 +560,13 @@ export function ElsevierPage() {
       </div>
       <ChoiceRow label="Citation style"
         options={[{ value: "numbered", label: "[1] Numbered" }, { value: "author", label: "Author-date" }]}
-        value="numbered"
-        onChange={() => {}}
+        value={citationStyle}
+        onChange={(v) => setCitationStyle(v as typeof citationStyle)}
       />
       <ChoiceRow label="Heading style"
         options={[{ value: "bold", label: "Bold" }, { value: "italic", label: "Italic Bold" }, { value: "caps", label: "Small Caps" }]}
-        value="bold"
-        onChange={() => {}}
+        value={headingStyle}
+        onChange={(v) => setHeadingStyle(v as HeadingStyle)}
       />
     </div>
   );
@@ -530,18 +575,18 @@ export function ElsevierPage() {
     <div>
       <ChoiceRow label="Figure position"
         options={[{ value: "inline", label: "Inline" }, { value: "top", label: "Top of col." }, { value: "bottom", label: "Bottom" }]}
-        value="inline"
-        onChange={() => {}}
+        value={figurePosition}
+        onChange={(v) => setFigurePosition(v as FigurePosition)}
       />
       <ChoiceRow label="Table position"
         options={[{ value: "inline", label: "Inline" }, { value: "top", label: "Top of col." }, { value: "bottom", label: "Bottom" }]}
-        value="inline"
-        onChange={() => {}}
+        value={tablePosition}
+        onChange={(v) => setTablePosition(v as FigurePosition)}
       />
       <ChoiceRow label="Caption style"
         options={[{ value: "below", label: "Below item" }, { value: "above", label: "Above item" }]}
-        value="below"
-        onChange={() => {}}
+        value={captionStyle}
+        onChange={(v) => setCaptionStyle(v as CaptionStyle)}
       />
     </div>
   );
@@ -561,7 +606,7 @@ export function ElsevierPage() {
         Export DOCX
       </button>
       <button onClick={() => {
-        const blob = new Blob([`<?xml version="1.0"?>\n<article><title>${paper.title.en}</title></article>`], { type: "application/xml" });
+        const blob = new Blob([`<?xml version="1.0"?>\n<article><title>${escapeXml(paper.title.en)}</title></article>`], { type: "application/xml" });
         Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "article.xml" }).click();
       }}
         style={{ width: "100%", padding: "7px 10px", fontFamily: SANS, fontWeight: 600, fontSize: "0.75rem", backgroundColor: "#fff", color: TEXT, border: `1px solid ${BORDER}`, borderRadius: 3, cursor: "pointer" }}>
@@ -607,6 +652,7 @@ export function ElsevierPage() {
           accentColor: "#c0392b",
           type: "elsevier",
         }}
+        pageLayout={getJournalPageLayout("elsevier", pageSize)}
         actions={{
           onExportPDF: () => window.print(),
           onExportWord: exportWord,
@@ -621,7 +667,7 @@ export function ElsevierPage() {
           layout: layoutTabPanel,
           export: exportTabPanel,
         }}
-        preview={<Preview paper={paper} lang={lang} columns={columns} />}
+        preview={<Preview paper={paper} lang={lang} columns={columns} marginSize={marginSize} pageSize={pageSize} fontFamily={fontFamily} fontSize={fontSize} lineSpacing={lineSpacing} headingStyle={headingStyle} figurePosition={figurePosition} tablePosition={tablePosition} captionStyle={captionStyle} citationStyle={citationStyle} />}
         rightPanelSections={{
           layout:       rpLayout,
           typography:   rpTypography,

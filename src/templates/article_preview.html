@@ -37,9 +37,9 @@ body {
   line-height: 1.62;
   color: var(--color-text);
   background: var(--color-bg);
-  width: 210mm;
+  width: {{ '216mm' if page_size == 'letter' else '210mm' }};
   max-width: 100%;
-  min-height: 297mm;
+  min-height: {{ '279mm' if page_size == 'letter' else '297mm' }};
   padding: 18mm 19mm;
   margin: 0 auto;
   print-color-adjust: exact;
@@ -152,7 +152,7 @@ body.two-column .article-main {
 /* ── 打印 ── */
 @media print {
   @page {
-    size: A4;
+    size: {{ 'Letter' if page_size == 'letter' else 'A4' }};
     margin: 18mm 19mm 18mm;
     @top-left { content: ""; border-bottom: 0.5pt solid #111; }
     @top-center { content: "{{ article.journal or '学术期刊' }}"; border-bottom: 0.5pt solid #111; font-family: var(--font-heading); font-size: 8.5pt; letter-spacing: 0.2em; }
@@ -266,7 +266,7 @@ body.two-column .article-main {
   {% macro render_fig(fig) %}
   <figure class="figure" id="{{ fig.id or 'fig-' ~ fig.number }}">
     {% set image_src = fig.graphic_href | resolve_image %}
-    {% if image_src %}<img src="{{ image_src }}" alt="{{ fig.caption }}" loading="lazy">{% endif %}
+    {% if image_src %}<img src="{{ image_src }}" alt="{{ fig.caption }}" loading="eager">{% endif %}
     <figcaption><span class="fig-label">{{ fig.label }}</span>&ensp;{{ fig.caption }}</figcaption>
   </figure>
   {% endmacro %}

@@ -1,3 +1,21 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+.journal-responsive-columns {
+  /* The preview renders each column as an explicit grid track. */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Keep two-column journal layouts usable in the compact desktop editor.
+   Collapse only at phone-sized viewports where two columns become unreadable. */
+@media (max-width: 560px) {
+  .journal-responsive-columns {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .journal-responsive-columns__column {
+    border-left: 0 !important;
+    padding-left: 0 !important;
+  }
+}

@@ -8,12 +8,17 @@
 import os
 import pickle
 import sqlite3
+import tempfile
 import uuid
 import re
 from datetime import datetime
 from typing import Optional
 
 SAMPLES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "samples")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_DB_PATH = os.path.join(PROJECT_ROOT, "data", "articles.db")
+DEFAULT_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "articles")
+ARTICLE_ID_RE = re.compile(r"^[0-9a-f]{8}$")
 SAMPLE_FILES = [
     os.path.join(SAMPLES_DIR, "sample1.xml"),
 ] + sorted(
@@ -28,11 +33,11 @@ SAMPLE_FILES = [
 class ArticleStore:
     """文章存储：SQLite 存元数据，pickle 存完整 Article 对象"""
 
-    def __init__(self, db_path: str = "data/articles.db", data_dir: str = "data/articles/"):
-        self.db_path = db_path
-        self.data_dir = data_dir
+    def __init__(self, db_path: str | None = None, data_dir: str | None = None):
+        self.db_path = os.path.abspath(db_path or DEFAULT_DB_PATH)
+        self.data_dir = os.path.abspath(data_dir or DEFAULT_DATA_DIR)
         os.makedirs(self.data_dir, exist_ok=True)
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
 
     # ── 数据库连接 ──────────────────────────────
 
@@ -102,6 +107,8 @@ class ArticleStore:
                     filepath: str = "") -> str:
         """存储 Article，返回 article_id。若 filepath 非空则读取文件大小。"""
         article_id = str(uuid.uuid4())[:8]
+        while os.path.exists(os.path.join(self.data_dir, f"{article_id}.pkl")):
+            article_id = str(uuid.uuid4())[:8]
         file_size = 0
         if filepath and os.path.exists(filepath):
             file_size = os.path.getsize(filepath)
@@ -132,45 +139,58 @@ class ArticleStore:
             for a in article.authors
         ]
 
-        with self._conn() as conn:
-            conn.execute("""
-                INSERT INTO articles (id, title, authors_json, keywords_json, keywords_en_json,
-                    abstract, abstract_en, journal, doi, year, lang, ref_count, section_count,
-                    figure_count, table_count, formula_count, source, original_filename,
-                    file_size, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-            """, (
-                article_id,
-                article.title,
-                __import__("json").dumps(authors_json, ensure_ascii=False),
-                __import__("json").dumps(article.keywords, ensure_ascii=False),
-                __import__("json").dumps(article.keywords_en, ensure_ascii=False),
-                article.abstract,
-                article.abstract_en,
-                article.journal,
-                article.doi,
-                year,
-                article.lang,
-                len(article.references),
-                len(article.sections),
-                figure_count,
-                table_count,
-                formula_count,
-                source,
-                filename,
-                file_size,
-            ))
-            conn.commit()
-
-        # pickle 完整 Article 对象
         pickle_path = os.path.join(self.data_dir, f"{article_id}.pkl")
-        with open(pickle_path, "wb") as f:
-            pickle.dump(article, f)
+        temp_path = ""
+        try:
+            fd, temp_path = tempfile.mkstemp(prefix=f".{article_id}.", suffix=".tmp", dir=self.data_dir)
+            with os.fdopen(fd, "wb") as stream:
+                pickle.dump(article, stream, protocol=pickle.HIGHEST_PROTOCOL)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp_path, pickle_path)
+
+            with self._conn() as conn:
+                conn.execute("""
+                    INSERT INTO articles (id, title, authors_json, keywords_json, keywords_en_json,
+                        abstract, abstract_en, journal, doi, year, lang, ref_count, section_count,
+                        figure_count, table_count, formula_count, source, original_filename,
+                        file_size, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                """, (
+                    article_id,
+                    article.title,
+                    __import__("json").dumps(authors_json, ensure_ascii=False),
+                    __import__("json").dumps(article.keywords, ensure_ascii=False),
+                    __import__("json").dumps(article.keywords_en, ensure_ascii=False),
+                    article.abstract,
+                    article.abstract_en,
+                    article.journal,
+                    article.doi,
+                    year,
+                    article.lang,
+                    len(article.references),
+                    len(article.sections),
+                    figure_count,
+                    table_count,
+                    formula_count,
+                    source,
+                    filename,
+                    file_size,
+                ))
+                conn.commit()
+        except Exception:
+            if temp_path and os.path.exists(temp_path):
+                os.unlink(temp_path)
+            if os.path.exists(pickle_path):
+                os.unlink(pickle_path)
+            raise
 
         return article_id
 
     def get_article(self, article_id: str):
         """从 pickle 加载完整 Article 对象"""
+        if not isinstance(article_id, str) or not ARTICLE_ID_RE.fullmatch(article_id):
+            return None
         pickle_path = os.path.join(self.data_dir, f"{article_id}.pkl")
         if not os.path.exists(pickle_path):
             return None
@@ -265,6 +285,8 @@ class ArticleStore:
 
     def delete_article(self, article_id: str) -> bool:
         """删除文章"""
+        if not isinstance(article_id, str) or not ARTICLE_ID_RE.fullmatch(article_id):
+            return False
         pickle_path = os.path.join(self.data_dir, f"{article_id}.pkl")
         if os.path.exists(pickle_path):
             os.remove(pickle_path)

@@ -10,7 +10,9 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      '/api': 'http://127.0.0.1:8000',
+      // When another local project occupies 8000, point the frontend at the
+      // matching JATS backend without changing application fetch URLs.
+      '/api': process.env.JATS2PDF_API_TARGET || 'http://127.0.0.1:8000',
     },
   },
 })

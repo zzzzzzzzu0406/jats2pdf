@@ -17,6 +17,7 @@ HTML，PDF 里公式会退化成裸文本堆叠（h i σ W ...），结构丢失
   可用环境变量 JATS2PDF_MJDIR 指定目录（默认 ~/mjnode）。
 """
 
+import html as html_lib
 import os
 import shutil
 import subprocess
@@ -24,7 +25,73 @@ import tempfile
 import logging
 from typing import Optional
 
+from lxml import etree
+
 logger = logging.getLogger(__name__)
+
+_FORMULA_TAGS = {
+    "math", "annotation", "semantics", "mrow", "mi", "mn", "mo", "ms", "mtext",
+    "mspace", "msup", "msub", "msubsup", "mfrac", "msqrt", "mroot", "mfenced",
+    "menclose", "mover", "munder", "munderover", "mpadded", "mphantom", "mstyle",
+    "mmultiscripts", "mtable", "mtr", "mtd", "maligngroup", "malignmark", "mglyph",
+    "none", "svg", "g", "path", "rect", "circle", "ellipse", "line", "polyline",
+    "polygon", "defs", "use", "title", "desc", "symbol", "clippath", "mask",
+}
+_FORMULA_ATTRS = {
+    "xmlns", "xmlns:xlink", "xlink", "viewbox", "width", "height", "version",
+    "preserveaspectratio", "class", "id", "role", "aria-label", "display", "mathvariant",
+    "mathsize", "scriptlevel", "stretchy", "movablelimits", "form", "fence", "accent",
+    "separator", "open", "close", "symmetric", "lspace", "rspace", "linethickness",
+    "columnalign", "rowalign", "columnspacing", "rowspacing", "x", "y", "x1", "x2",
+    "y1", "y2", "d", "fill", "fill-rule", "stroke", "stroke-width", "stroke-linecap",
+    "stroke-linejoin", "stroke-miterlimit", "transform", "opacity", "fill-opacity",
+    "stroke-opacity", "clip-path", "text-anchor", "font-family", "font-size", "font-style",
+    "font-weight", "href",
+}
+
+
+def _formula_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower() if isinstance(tag, str) else ""
+
+
+def sanitize_formula_markup(markup: str) -> str:
+    """保留公式所需 MathML/SVG，移除脚本、事件属性和外部资源。"""
+    if not markup:
+        return ""
+    if not markup.lstrip().startswith("<"):
+        return html_lib.escape(markup)
+    parser = etree.XMLParser(resolve_entities=False, no_network=True, recover=False, huge_tree=False)
+    try:
+        root = etree.fromstring(markup.encode("utf-8"), parser)
+    except (etree.XMLSyntaxError, UnicodeEncodeError):
+        return html_lib.escape(markup)
+    if _formula_local_name(root.tag) not in _FORMULA_TAGS:
+        return html_lib.escape(markup)
+
+    changed = False
+
+    def clean(element):
+        nonlocal changed
+        for child in list(element):
+            if _formula_local_name(child.tag) not in _FORMULA_TAGS:
+                element.remove(child)
+                changed = True
+                continue
+            clean(child)
+        for attr, value in list(element.attrib.items()):
+            attr_name = _formula_local_name(attr)
+            if attr_name not in _FORMULA_ATTRS or attr_name == "style":
+                del element.attrib[attr]
+                changed = True
+                continue
+            if attr_name in {"href", "xlink"} and not str(value).startswith("#"):
+                del element.attrib[attr]
+                changed = True
+
+    clean(root)
+    if not changed:
+        return markup
+    return etree.tostring(root, encoding="unicode")
 
 
 # mathjax-node 调用脚本：读入公式文件 → 输出 SVG 到 stdout
@@ -128,17 +195,18 @@ class FormulaRenderer:
 
     def mathml_to_svg(self, mathml: str, inline: bool = False) -> str:
         """MathML → SVG。passthrough 模式原样返回。"""
+        mathml = sanitize_formula_markup(mathml)
         if self.method == "passthrough":
             return mathml
         svg = self._run_helper(mathml, "MathML")
-        return svg or mathml
+        return sanitize_formula_markup(svg or mathml)
 
     def latex_to_svg(self, latex: str, display: bool = True) -> str:
         """LaTeX → SVG。"""
         if self.method == "passthrough":
-            return f"$${latex}$$" if display else f"${latex}$"
+            return sanitize_formula_markup(f"$${latex}$$" if display else f"${latex}$")
         svg = self._run_helper(latex, "TeX")
-        return svg or (f"$${latex}$$" if display else f"${latex}$")
+        return sanitize_formula_markup(svg or (f"$${latex}$$" if display else f"${latex}$"))
 
     def process_article_formulas(self, article):
         """预处理整篇文章公式：块级公式 + 行内公式（段落 FormulaRun）→ SVG。"""

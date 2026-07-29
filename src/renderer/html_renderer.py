@@ -86,6 +86,7 @@ class HTMLRenderer:
             font_style = "academic"
         if font_size not in {"small", "medium", "large"}:
             font_size = "medium"
+        font_map = {"small": "13px", "medium": "14px", "large": "15px"}
         return self._render_page("article.html", {
             "article": article,
             "has_authors": bool(article.authors),
@@ -97,6 +98,7 @@ class HTMLRenderer:
             "two_column": two_column,
             "font_style": font_style,
             "font_size": font_size,
+            "font_size_px": font_map[font_size],
             "asset_mode": asset_mode,
             "asset_base": asset_base,
             "allow_remote_assets": False,

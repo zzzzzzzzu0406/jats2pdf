@@ -46,7 +46,7 @@ from pathlib import PurePosixPath
 
 from PIL import Image, ImageOps
 
-from fastapi import FastAPI, File, UploadFile, Query, HTTPException
+from fastapi import FastAPI, File, UploadFile, Query, HTTPException, Request
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -69,7 +69,19 @@ from .config import (
     ARTICLE_ASSET_DIR,
 )
 from .jinja_env import get_jinja_env
-from .parser.jats_parser import JATSParser
+from .parser.jats_parser import (
+    Affiliation,
+    Author,
+    ContentBlock,
+    Figure,
+    JATSParser,
+    Paragraph,
+    Reference,
+    Run,
+    Section,
+    Table,
+    TableCell,
+)
 from .renderer.html_renderer import HTMLRenderer
 from .store import ArticleStore
 
@@ -84,6 +96,7 @@ html_renderer = HTMLRenderer()
 
 # 公式预渲染缓存：article_id → bool（是否已处理）
 _formula_cache: set = set()
+_formula_lock = threading.RLock()
 _pmc_asset_cache: dict[str, dict[str, str]] = {}
 _pmc_asset_lock = threading.RLock()
 
@@ -94,6 +107,9 @@ _MAX_REMOTE_IMAGE_BYTES = 25 * 1024 * 1024
 _MAX_PDF_IMAGE_EDGE = 2400
 _MAX_ZIP_FILES = 500
 _IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff"}
+_MAX_EDITOR_JSON_BYTES = 2 * 1024 * 1024
+_MAX_EDITOR_STRING_BYTES = 200_000
+_ARTICLE_ID_RE = re.compile(r"^[0-9a-f]{8}$")
 
 # ── 生命周期 ──────────────────────────────────
 
@@ -125,8 +141,24 @@ _IMAGE_SEARCH_DIRS = SAMPLE_DIRS
 
 # ── 辅助函数 ──────────────────────────────────
 
+def _validate_article_id(article_id: str) -> str:
+    """只允许存储层生成的 8 位十六进制 ID，避免路径拼接越界。"""
+    if not isinstance(article_id, str) or not _ARTICLE_ID_RE.fullmatch(article_id):
+        raise HTTPException(400, "无效的文章 ID")
+    return article_id
+
+
+def _contained_path(base_dir: str, *parts: str) -> str:
+    """返回位于 base_dir 内的规范路径；越界时返回空字符串。"""
+    base = os.path.realpath(base_dir)
+    candidate = os.path.realpath(os.path.join(base_dir, *parts))
+    if candidate == base or candidate.startswith(base + os.sep):
+        return candidate
+    return ""
+
 def _load_article(article_id: str):
     """加载 Article 并注入 id 属性"""
+    article_id = _validate_article_id(article_id)
     article = store.get_article(article_id)
     if article is None:
         raise HTTPException(404, f"文章不存在: {article_id}")
@@ -146,6 +178,356 @@ def _deep_merge(base: dict, overlay: dict) -> None:
             _deep_merge(base[key], value)
         else:
             base[key] = value
+
+
+def _edited_path(article_id: str) -> str:
+    article_id = _validate_article_id(article_id)
+    return _contained_path(store.data_dir, f"{article_id}_edited.json")
+
+
+def _read_edited_paper(article_id: str) -> dict:
+    """读取已保存的 PaperData；损坏或旧格式按无编辑内容处理。"""
+    try:
+        with open(_edited_path(article_id), "r", encoding="utf-8") as stream:
+            saved = json.load(stream)
+        paper = saved.get("paper", saved) if isinstance(saved, dict) else {}
+        return paper if isinstance(paper, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_edited_paper(article_id: str, paper: dict) -> None:
+    """在线程中原子写入编辑 JSON，避免大请求阻塞事件循环。"""
+    os.makedirs(store.data_dir, exist_ok=True)
+    edited_path = _edited_path(article_id)
+    fd, temp_path = tempfile.mkstemp(
+        prefix=f"{article_id}_edited_", suffix=".tmp", dir=store.data_dir
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(
+                {"paper": paper, "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")},
+                stream,
+                ensure_ascii=False,
+                indent=2,
+            )
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_path, edited_path)
+    except OSError:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _validate_editor_value(value, depth: int = 0) -> None:
+    """限制编辑 JSON 的体积和深度，避免任意嵌套数据进入磁盘。"""
+    if depth > 8:
+        raise HTTPException(422, "编辑数据嵌套层级过深")
+    if isinstance(value, str) and len(value.encode("utf-8")) > _MAX_EDITOR_STRING_BYTES:
+        raise HTTPException(422, "单个编辑字段过长")
+    if isinstance(value, list):
+        if len(value) > 2000:
+            raise HTTPException(422, "编辑数组项目过多")
+        for item in value:
+            _validate_editor_value(item, depth + 1)
+    elif isinstance(value, dict):
+        if len(value) > 200:
+            raise HTTPException(422, "编辑对象字段过多")
+        for key, item in value.items():
+            _validate_editor_value(key, depth + 1)
+            _validate_editor_value(item, depth + 1)
+
+
+def _localized_value(value, lang: str) -> str:
+    if isinstance(value, dict):
+        preferred = value.get(lang) or value.get("en") or value.get("zh") or ""
+        return str(preferred)
+    return str(value or "")
+
+
+def _apply_editor_paper(article, paper: dict):
+    """将编辑器 PaperData 的安全字段应用到 Article 渲染模型。"""
+    if not paper:
+        return article
+
+    lang = "en" if article.lang == "en" else "zh"
+    for field in ("journal", "doi", "volume", "year", "pages"):
+        if field in paper and isinstance(paper[field], (str, int, float)):
+            if field == "journal":
+                article.journal = str(paper[field])
+            elif field == "doi":
+                article.doi = str(paper[field])
+            elif field == "year" and str(paper[field]).isdigit():
+                article.publication_year = int(str(paper[field]))
+
+    title = paper.get("title")
+    if isinstance(title, dict):
+        article.title = _localized_value(title, lang)
+    abstract = paper.get("abstract")
+    if isinstance(abstract, dict):
+        article.abstract = _localized_value(abstract, "zh")
+        article.abstract_en = _localized_value(abstract, "en")
+    keywords = paper.get("keywords")
+    if isinstance(keywords, dict):
+        article.keywords = [str(item) for item in keywords.get("zh", []) if isinstance(item, (str, int, float))]
+        article.keywords_en = [str(item) for item in keywords.get("en", []) if isinstance(item, (str, int, float))]
+
+    authors = paper.get("authors")
+    if isinstance(authors, list):
+        mapped_authors = []
+        for item in authors:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or item.get("nameZh") or "").strip()
+            parts = name.split()
+            mapped_authors.append(Author(
+                given_name=" ".join(parts[:-1]),
+                surname=parts[-1] if parts else "",
+                affiliation=str(item.get("affKeys") or ""),
+                email=str(item.get("email") or ""),
+            ))
+        article.authors = mapped_authors
+
+    affiliations = paper.get("affiliations")
+    if isinstance(affiliations, list):
+        article.affiliations = [
+            Affiliation(id=str(item.get("key") or index), name=str(item.get("text") or item.get("textZh") or ""))
+            for index, item in enumerate(affiliations, 1)
+            if isinstance(item, dict)
+        ]
+
+    def walk_sections(sections):
+        for section in sections:
+            yield section
+            yield from walk_sections(getattr(section, "subsections", []) or [])
+
+    original_sections = list(walk_sections(getattr(article, "sections", []) or []))
+    section_by_id = {}
+    def index_sections(sections, prefix=""):
+        for index, section in enumerate(sections, 1):
+            number = f"{prefix}.{index}" if prefix else str(index)
+            section_by_id[f"section-{number.replace('.', '-')}"] = section
+            index_sections(getattr(section, "subsections", []) or [], number)
+    index_sections(getattr(article, "sections", []) or [])
+    for index, section in enumerate(original_sections, 1):
+        if getattr(section, "id", ""):
+            section_by_id[section.id] = section
+    edited_sections = paper.get("sections")
+    if isinstance(edited_sections, list):
+        section_ids_by_object = {
+            id(section): section_id
+            for section_id, section in section_by_id.items()
+        }
+        desired_section_ids = {
+            str(item.get("id") or "")
+            for item in edited_sections
+            if isinstance(item, dict) and item.get("id")
+        }
+
+        def section_paragraphs(content: str):
+            return [
+                Paragraph(runs=[Run(kind="text", text=text.strip())])
+                for text in content.split("\n\n")
+                if text.strip()
+            ]
+
+        def set_section_content(section, item):
+            if "title" in item:
+                section.title = _localized_value(item["title"], lang)
+            if "content" not in item:
+                return
+            paragraphs = section_paragraphs(_localized_value(item["content"], lang))
+            section.paragraphs = paragraphs
+            if getattr(section, "blocks", None):
+                paragraph_index = 0
+                blocks = []
+                for block in section.blocks:
+                    if block.kind != "paragraph":
+                        blocks.append(block)
+                        continue
+                    if paragraph_index < len(paragraphs):
+                        blocks.append(ContentBlock(kind="paragraph", value=paragraphs[paragraph_index]))
+                        paragraph_index += 1
+                while paragraph_index < len(paragraphs):
+                    blocks.append(ContentBlock(kind="paragraph", value=paragraphs[paragraph_index]))
+                    paragraph_index += 1
+                section.blocks = blocks
+
+        for item in edited_sections:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id") or "")
+            section = section_by_id.get(item_id)
+            if section is None:
+                section = Section(
+                    title=_localized_value(item.get("title", ""), lang),
+                    level=1,
+                    paragraphs=section_paragraphs(_localized_value(item.get("content", ""), lang)),
+                )
+                section_by_id[item_id] = section
+                section_ids_by_object[id(section)] = item_id
+                article.sections.append(section)
+                if getattr(article, "blocks", None):
+                    article.blocks.append(ContentBlock(kind="section", value=section))
+            set_section_content(section, item)
+
+        # The editor sends the complete section list. Removing a section in the
+        # panel therefore also removes it from the server-side render model.
+        keep_objects = set()
+
+        def prune_sections(sections):
+            kept = []
+            for section in sections:
+                generated_id = next(
+                    (key for key, value in section_by_id.items() if value is section),
+                    "",
+                )
+                explicit_id = getattr(section, "id", "")
+                if generated_id not in desired_section_ids and explicit_id not in desired_section_ids:
+                    continue
+                keep_objects.add(id(section))
+                section.subsections = prune_sections(getattr(section, "subsections", []) or [])
+                kept.append(section)
+            return kept
+
+        article.sections = prune_sections(getattr(article, "sections", []) or [])
+        if getattr(article, "blocks", None):
+            article.blocks = [
+                block for block in article.blocks
+                if block.kind != "section" or id(block.value) in keep_objects
+            ]
+
+    all_sections = list(walk_sections(getattr(article, "sections", []) or []))
+    section_by_id = {}
+    index_sections(getattr(article, "sections", []) or [])
+    for section in all_sections:
+        if getattr(section, "id", ""):
+            section_by_id[section.id] = section
+    if isinstance(edited_sections, list):
+        for section in all_sections:
+            section_id = section_ids_by_object.get(id(section))
+            if section_id:
+                section_by_id[section_id] = section
+
+    figures_by_id = {}
+    tables_by_id = {}
+    for container in [article, *all_sections, *original_sections]:
+        for figure in getattr(container, "figures", []) or []:
+            if figure.id:
+                figures_by_id[figure.id] = figure
+        for table in getattr(container, "tables", []) or []:
+            if table.id:
+                tables_by_id[table.id] = table
+
+    def detach_blocks(kind: str):
+        for container in [article, *all_sections]:
+            if getattr(container, "blocks", None):
+                container.blocks = [block for block in container.blocks if block.kind != kind]
+
+    def attach_block(container, kind: str, value):
+        if getattr(container, "blocks", None):
+            container.blocks.append(ContentBlock(kind=kind, value=value))
+
+    def positive_int(value, fallback):
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return fallback
+
+    edited_figures = paper.get("figures")
+    if isinstance(edited_figures, list):
+        detach_blocks("figure")
+        for container in [article, *all_sections]:
+            container.figures = []
+        for index, item in enumerate(edited_figures, 1):
+            if not isinstance(item, dict):
+                continue
+            figure_id = str(item.get("id") or f"figure-{index}")
+            figure = figures_by_id.get(figure_id) or Figure(id=figure_id)
+            figure.number = positive_int(item.get("number"), index)
+            figure.caption = _localized_value(item.get("caption", figure.caption), lang)
+            if isinstance(item.get("src"), str):
+                figure.graphic_href = item["src"]
+            figure.label = "Figure " + str(figure.number) if article.lang == "en" else "图" + str(figure.number)
+            section = section_by_id.get(str(item.get("sectionId") or ""))
+            if section is not None:
+                section.figures.append(figure)
+                attach_block(section, "figure", figure)
+            else:
+                article.figures.append(figure)
+                attach_block(article, "figure", figure)
+
+    def map_cells(rows, force_header=False):
+        result = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, list):
+                continue
+            result.append([
+                TableCell(
+                    text=str(cell.get("text") or "") if isinstance(cell, dict) else str(cell),
+                    colspan=positive_int(cell.get("colspan", 1), 1) if isinstance(cell, dict) else 1,
+                    rowspan=positive_int(cell.get("rowspan", 1), 1) if isinstance(cell, dict) else 1,
+                    is_header=force_header or bool(cell.get("isHeader")) if isinstance(cell, dict) else force_header,
+                    align=str(cell.get("align") or "") if isinstance(cell, dict) else "",
+                ) for cell in row
+            ])
+        return result
+
+    edited_tables = paper.get("tables")
+    if isinstance(edited_tables, list):
+        detach_blocks("table")
+        for container in [article, *all_sections]:
+            container.tables = []
+        for index, item in enumerate(edited_tables, 1):
+            if not isinstance(item, dict):
+                continue
+            table_id = str(item.get("id") or f"table-{index}")
+            table = tables_by_id.get(table_id) or Table(id=table_id)
+            table.number = positive_int(item.get("number"), index)
+            table.caption = _localized_value(item.get("caption", table.caption), lang)
+            if "headerRows" in item or "bodyRows" in item:
+                table.header_rows = map_cells(item.get("headerRows", []), force_header=True)
+                table.body_rows = map_cells(item.get("bodyRows", []))
+                table.headers = [cell.text for row in table.header_rows for cell in row]
+                table.rows = [[cell.text for cell in row] for row in table.body_rows]
+            elif "headers" in item or "rows" in item:
+                table.headers = [str(value) for value in item.get("headers", []) if isinstance(value, (str, int, float))]
+                table.rows = [
+                    [str(value) for value in row.get("cells", [])]
+                    for row in item.get("rows", [])
+                    if isinstance(row, dict) and isinstance(row.get("cells"), list)
+                ]
+                table.header_rows = []
+                table.body_rows = []
+            table.footnotes = [str(note) for note in item.get("footnotes", []) if isinstance(note, (str, int, float))]
+            section = section_by_id.get(str(item.get("sectionId") or ""))
+            if section is not None:
+                section.tables.append(table)
+                attach_block(section, "table", table)
+            else:
+                article.tables.append(table)
+                attach_block(article, "table", table)
+
+    references = paper.get("references")
+    if isinstance(references, list):
+        mapped_refs = []
+        for index, value in enumerate(references, 1):
+            ref = article.references[index - 1] if index <= len(article.references) else Reference(id=f"ref-{index}")
+            ref.authors = ""
+            ref.journal = ""
+            ref.doi = ""
+            ref.title = str(value or "")
+            mapped_refs.append(ref)
+        article.references = mapped_refs
+    return article
+
+
+def _load_effective_article(article_id: str):
+    article = _load_article(article_id)
+    return _apply_editor_paper(article, _read_edited_paper(article_id))
 
 
 def _extract_pmc_asset_map(page_html: str) -> dict[str, str]:
@@ -265,12 +647,18 @@ def _looks_like_image(payload: bytes) -> bool:
     )
 
 
+def _image_name_from_href(href: str) -> str:
+    """从 JATS 图片引用中提取真实文件名，兼容 URL 编码路径。"""
+    path = urllib.parse.urlparse(str(href or "")).path
+    return os.path.basename(urllib.parse.unquote(path))
+
+
 def _cache_pmc_image(pmcid: str, filename: str) -> str:
     """把可信 PMC CDN 图片下载到本地缓存，后续直接由本服务返回。"""
     pmcid = pmcid.upper()
     if not re.fullmatch(r"PMC\d+", pmcid):
         return ""
-    safe_name = os.path.basename(filename)
+    safe_name = _image_name_from_href(filename)
     cache_dir = os.path.join(PMC_ASSET_DIR, pmcid)
     cache_path = os.path.join(cache_dir, safe_name)
     if os.path.isfile(cache_path):
@@ -303,38 +691,50 @@ def _cache_pmc_image(pmcid: str, filename: str) -> str:
 def _render_formulas(article_id: str):
     """懒加载：首次请求时预渲染公式，之后缓存"""
     global _formula_cache
-    if article_id in _formula_cache:
-        return
-    try:
-        from .renderer.formula_renderer import FormulaRenderer
-        article = store.get_article(article_id)
-        if article is None:
+    with _formula_lock:
+        if article_id in _formula_cache:
             return
-        FormulaRenderer(method="auto").process_article_formulas(article)
-        # 直接覆盖 pickle（保留原有 article_id）
-        pickle_path = os.path.join(store.data_dir, f"{article_id}.pkl")
-        with open(pickle_path, "wb") as f:
-            pickle.dump(article, f)
-        _formula_cache.add(article_id)
-    except Exception as e:
-        print(f"[server] 公式预渲染失败 {article_id}: {e}")
+        try:
+            from .renderer.formula_renderer import FormulaRenderer
+            article = store.get_article(article_id)
+            if article is None:
+                return
+            FormulaRenderer(method="auto").process_article_formulas(article)
+            pickle_path = os.path.join(store.data_dir, f"{article_id}.pkl")
+            fd, temp_path = tempfile.mkstemp(prefix=f".{article_id}.formula.", suffix=".tmp", dir=store.data_dir)
+            try:
+                with os.fdopen(fd, "wb") as stream:
+                    pickle.dump(article, stream, protocol=pickle.HIGHEST_PROTOCOL)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temp_path, pickle_path)
+            finally:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            _formula_cache.add(article_id)
+        except Exception as e:
+            print(f"[server] 公式预渲染失败 {article_id}: {e}")
 
 def _get_settings(
     ref_style: str = "elsevier",
     two_column: bool = False,
     font_style: str = "academic",
     font_size: str = "medium",
+    page_size: str = "a4",
 ):
     """解析渲染参数"""
     if font_style not in {"academic", "modern", "international"}:
         font_style = "academic"
     if font_size not in {"small", "medium", "large"}:
         font_size = "medium"
+    if page_size not in {"a4", "letter"}:
+        page_size = "a4"
     return {
         "ref_style": ref_style,
         "two_column": two_column,
         "font_style": font_style,
         "font_size": font_size,
+        "page_size": page_size,
     }
 
 def _render_article_html(article, settings: dict) -> str:
@@ -350,6 +750,7 @@ def _render_article_html(article, settings: dict) -> str:
         two_column=settings.get("two_column", False),
         font_size=font_map.get(settings.get("font_size", "medium"), "14px"),
         font_style=settings.get("font_style", "academic"),
+        page_size=settings.get("page_size", "a4"),
     )
     return html
 
@@ -368,6 +769,7 @@ def _render_preview_html(article, settings: dict) -> str:
         two_column=settings["two_column"],
         font_size=font_map[settings["font_size"]],
         font_style=settings["font_style"],
+        page_size=settings.get("page_size", "a4"),
     )
 
 
@@ -407,17 +809,23 @@ def _find_article_image(article, article_id: str, href: str) -> str:
     """解析图片到可信本地文件，供 PDF 内嵌和编辑器预览复用。"""
     if not href or href.startswith("data:"):
         return ""
-    safe_name = os.path.basename(urllib.parse.urlparse(href).path)
+    safe_name = _image_name_from_href(href)
     if not safe_name:
         return ""
 
     candidates = []
-    if re.fullmatch(r"[0-9a-f]{8}", article_id):
-        candidates.append(os.path.join(_ARTICLE_ASSET_DIR, article_id, safe_name))
+    if _ARTICLE_ID_RE.fullmatch(article_id):
+        article_asset = _contained_path(_ARTICLE_ASSET_DIR, article_id, safe_name)
+        if article_asset:
+            candidates.append(article_asset)
     for search_dir in _IMAGE_SEARCH_DIRS:
-        candidates.append(os.path.join(search_dir, safe_name))
+        candidate = _contained_path(search_dir, safe_name)
+        if candidate:
+            candidates.append(candidate)
         if not href.startswith(("http://", "https://", "//")):
-            candidates.append(os.path.join(search_dir, href))
+            candidate = _contained_path(search_dir, href)
+            if candidate:
+                candidates.append(candidate)
     for candidate in candidates:
         if os.path.isfile(candidate):
             return candidate
@@ -575,7 +983,7 @@ def _article_editor_payload(article, article_id: str) -> dict:
 
     figures = []
     for index, figure in enumerate(_iter_article_figures(article), 1):
-        safe_name = os.path.basename(urllib.parse.urlparse(figure.graphic_href or "").path)
+        safe_name = _image_name_from_href(figure.graphic_href or "")
         params = {"article_id": article_id}
         pmcid = str(getattr(article, "pmcid", "") or "").upper()
         if re.fullmatch(r"PMC\d+", pmcid):
@@ -700,6 +1108,18 @@ async def page_studio():
     return RedirectResponse("/?view=library", status_code=307)
 
 
+@app.get("/samples", response_class=HTMLResponse)
+@app.get("/samples/", response_class=HTMLResponse)
+@app.get("/samples/{rest:path}", response_class=HTMLResponse)
+async def page_samples(request: Request):
+    """让生产环境的 React Router 也能直接打开样例深层链接。"""
+    if is_dev():
+        return RedirectResponse(f"{PORTAL_DEV_URL}{request.url.path}", status_code=307)
+    if os.path.isfile(WEB_INDEX):
+        return FileResponse(WEB_INDEX, media_type="text/html")
+    return RedirectResponse("/", status_code=307)
+
+
 @app.get("/upload", response_class=HTMLResponse)
 async def page_upload():
     if is_dev():
@@ -716,6 +1136,7 @@ async def page_article(
     two_column: bool = Query(False),
     font_style: str = Query("academic"),
     font_size: str = Query("medium"),
+    page_size: str = Query("a4"),
 ):
     if is_dev():
         return RedirectResponse(
@@ -729,9 +1150,9 @@ async def page_article(
         )
     article = _load_article(article_id)
     _render_formulas(article_id)
-    article = _load_article(article_id)
+    article = _load_effective_article(article_id)
     article.id = article_id
-    settings = _get_settings(ref_style, two_column, font_style, font_size)
+    settings = _get_settings(ref_style, two_column, font_style, font_size, page_size)
     return _render_article_html(article, settings)
 
 
@@ -798,6 +1219,11 @@ def _extract_zip_bundle(content: bytes, temp_dir: str) -> tuple[str, str]:
         return xml_path, assets_dir
 
 
+def _write_bytes(path: str, content: bytes) -> None:
+    with open(path, "wb") as target:
+        target.write(content)
+
+
 def _store_article_assets(article_id: str, assets_dir: str):
     """把上传资源按 article_id 隔离保存，避免不同论文同名图片冲突。"""
     files = [
@@ -833,25 +1259,24 @@ async def api_upload(file: UploadFile = File(...)):
         assets_dir = ""
         if is_zip:
             source_path = os.path.join(temp_dir, "bundle.zip")
-            with open(source_path, "wb") as target:
-                target.write(content)
-            xml_path, assets_dir = _extract_zip_bundle(content, temp_dir)
+            await asyncio.to_thread(_write_bytes, source_path, content)
+            xml_path, assets_dir = await asyncio.to_thread(_extract_zip_bundle, content, temp_dir)
         else:
             source_path = xml_path = os.path.join(temp_dir, "article.xml")
-            with open(xml_path, "wb") as target:
-                target.write(content)
+            await asyncio.to_thread(_write_bytes, xml_path, content)
 
-        article = JATSParser(xml_path).parse()
+        article = await asyncio.to_thread(JATSParser(xml_path).parse)
 
-        article_id = store.add_article(
+        article_id = await asyncio.to_thread(
+            store.add_article,
             article,
-            filename=filename,
-            source="upload_bundle" if is_zip else "upload",
-            filepath=source_path,
+            filename,
+            "upload_bundle" if is_zip else "upload",
+            source_path,
         )
         article.id = article_id
         if assets_dir:
-            _store_article_assets(article_id, assets_dir)
+            await asyncio.to_thread(_store_article_assets, article_id, assets_dir)
 
         # 构建元数据响应（预览 HTML 由前端单独请求 /api/articles/{id}/preview 获取）
         authors_list = [{"name": f"{a.given_name} {a.surname}".strip(), "affiliation": a.affiliation}
@@ -886,19 +1311,26 @@ async def api_list_articles(
     year: int | None = Query(None, ge=1000, le=9999),
 ):
     """文章列表（分页+搜索+筛选）"""
-    return store.list_articles(page=page, per_page=per_page, search=search, field=field, year=year)
+    return await asyncio.to_thread(
+        store.list_articles,
+        page=page,
+        per_page=per_page,
+        search=search,
+        field=field,
+        year=year,
+    )
 
 
 @app.get("/api/articles/{article_id}")
 async def api_get_article(article_id: str):
     """获取文章详情（JSON + 渲染 HTML）"""
-    article = _load_article(article_id)
-    _render_formulas(article_id)
-    article = _load_article(article_id)
+    article = await asyncio.to_thread(_load_article, article_id)
+    await asyncio.to_thread(_render_formulas, article_id)
+    article = await asyncio.to_thread(_load_effective_article, article_id)
     article.id = article_id
 
     settings = _get_settings()
-    html = _render_article_html(article, settings)
+    html = await asyncio.to_thread(_render_article_html, article, settings)
 
     return JSONResponse({
         "article_id": article_id,
@@ -914,22 +1346,13 @@ async def api_get_article(article_id: str):
 async def api_get_editor_article(article_id: str):
     """获取供原版 React 文章编辑器使用的真实结构化数据。
     如果有已保存的编辑内容，会合并在解析结果之上。"""
-    article = _load_article(article_id)
+    article = await asyncio.to_thread(_load_article, article_id)
     article.id = article_id
-    payload = _article_editor_payload(article, article_id)
+    payload = await asyncio.to_thread(_article_editor_payload, article, article_id)
 
-    # 合并已保存的编辑（如果有）
-    edited_path = os.path.join(store.data_dir, f"{article_id}_edited.json")
-    if os.path.isfile(edited_path):
-        try:
-            with open(edited_path, "r", encoding="utf-8") as f:
-                saved = json.load(f)
-            if isinstance(saved, dict):
-                saved_paper = saved.get("paper", saved)
-                current_paper = payload.get("paper", {})
-                _deep_merge(current_paper, saved_paper)
-        except (json.JSONDecodeError, OSError):
-            pass
+    saved_paper = await asyncio.to_thread(_read_edited_paper, article_id)
+    if saved_paper:
+        _deep_merge(payload.get("paper", {}), saved_paper)
 
     return JSONResponse(payload)
 
@@ -938,20 +1361,29 @@ async def api_get_editor_article(article_id: str):
 async def api_update_editor_article(article_id: str, paper: dict | None = None):
     """保存 React 文章编辑器的修改内容。
     编辑数据存储为 JSON，不影响原始 JATS 解析结果。"""
+    _validate_article_id(article_id)
     # 验证文章存在
     try:
-        _load_article(article_id)
-    except HTTPException:
+        await asyncio.to_thread(_load_article, article_id)
+    except HTTPException as exc:
+        if exc.status_code == 400:
+            raise
         raise HTTPException(404, f"文章不存在: {article_id}")
 
-    if not paper:
+    if paper is None:
         paper = {}
+    # The React editor sends {"paper": PaperData}; accept a raw PaperData body
+    # as well so API clients do not need to duplicate the transport wrapper.
+    if set(paper) == {"paper"} and isinstance(paper.get("paper"), dict):
+        paper = paper["paper"]
+    _validate_editor_value(paper)
+    if len(json.dumps(paper, ensure_ascii=False).encode("utf-8")) > _MAX_EDITOR_JSON_BYTES:
+        raise HTTPException(413, "编辑内容不能超过 2 MB")
 
-    os.makedirs(store.data_dir, exist_ok=True)
-    edited_path = os.path.join(store.data_dir, f"{article_id}_edited.json")
-    with open(edited_path, "w", encoding="utf-8") as f:
-        json.dump({"paper": paper, "saved_at": time.strftime("%Y-%m-%d %H:%M:%S")},
-                  f, ensure_ascii=False, indent=2)
+    try:
+        await asyncio.to_thread(_write_edited_paper, article_id, paper)
+    except OSError:
+        raise HTTPException(500, "编辑内容保存失败")
 
     return JSONResponse({"status": "ok", "article_id": article_id})
 
@@ -963,15 +1395,16 @@ async def api_preview(
     two_column: bool = Query(False),
     font_size: str = Query("medium"),
     font_style: str = Query("academic"),
+    page_size: str = Query("a4"),
 ):
     """获取 iframe 预览 HTML（使用干净模板，无导航/页脚）"""
-    article = _load_article(article_id)
-    _render_formulas(article_id)
-    article = _load_article(article_id)
+    article = await asyncio.to_thread(_load_article, article_id)
+    await asyncio.to_thread(_render_formulas, article_id)
+    article = await asyncio.to_thread(_load_effective_article, article_id)
     article.id = article_id
 
-    settings = _get_settings(ref_style, two_column, font_style, font_size)
-    return HTMLResponse(_render_preview_html(article, settings))
+    settings = _get_settings(ref_style, two_column, font_style, font_size, page_size)
+    return HTMLResponse(await asyncio.to_thread(_render_preview_html, article, settings))
 
 
 @app.get("/api/articles/{article_id}/html")
@@ -981,15 +1414,16 @@ async def api_download_html(
     two_column: bool = Query(False),
     font_style: str = Query("academic"),
     font_size: str = Query("medium"),
+    page_size: str = Query("a4"),
 ):
     """下载独立 HTML 文件"""
-    article = _load_article(article_id)
-    _render_formulas(article_id)
-    article = _load_article(article_id)
+    article = await asyncio.to_thread(_load_article, article_id)
+    await asyncio.to_thread(_render_formulas, article_id)
+    article = await asyncio.to_thread(_load_effective_article, article_id)
     article.id = article_id
 
-    settings = _get_settings(ref_style, two_column, font_style, font_size)
-    html = _render_preview_html(article, settings)
+    settings = _get_settings(ref_style, two_column, font_style, font_size, page_size)
+    html = await asyncio.to_thread(_render_preview_html, article, settings)
 
     # 文件名只保留 ASCII 字符
     safe_title = article.title.encode("ascii", "ignore").decode()[:30].strip() or "article"
@@ -1008,23 +1442,24 @@ async def api_download_pdf(
     two_column: bool = Query(False),
     font_style: str = Query("academic"),
     font_size: str = Query("medium"),
+    page_size: str = Query("a4"),
 ):
     """生成并下载 PDF"""
-    article = _load_article(article_id)
-    _render_formulas(article_id)
-    article = _load_article(article_id)
+    article = await asyncio.to_thread(_load_article, article_id)
+    await asyncio.to_thread(_render_formulas, article_id)
+    article = await asyncio.to_thread(_load_effective_article, article_id)
     article.id = article_id
 
-    settings = _get_settings(ref_style, two_column, font_style, font_size)
+    settings = _get_settings(ref_style, two_column, font_style, font_size, page_size)
     embedded_images = await asyncio.to_thread(_embed_article_images, article, article_id)
-    html = _render_preview_html(article, settings)
+    html = await asyncio.to_thread(_render_preview_html, article, settings)
 
     try:
         from .renderer.pdf_renderer import PDFRenderer
         # article_preview.html 已包含与屏幕预览完全相同的自包含 CSS；
         # 不再叠加旧 styles.css，否则会重新引入卡片、跨栏等冲突规则。
         pdf_renderer = PDFRenderer(css_path="")
-        pdf_bytes = pdf_renderer.render_to_bytes(html)
+        pdf_bytes = await asyncio.to_thread(pdf_renderer.render_to_bytes, html)
     except Exception as e:
         raise HTTPException(500, f"PDF 生成失败: {str(e)}")
 
@@ -1044,7 +1479,7 @@ async def api_download_pdf(
 @app.get("/api/filters")
 async def api_filters():
     """获取可用筛选值"""
-    return store.get_filter_values()
+    return await asyncio.to_thread(store.get_filter_values)
 
 
 @app.get("/api/files/{filename}")
@@ -1058,8 +1493,9 @@ async def api_serve_file(
     if not safe_name:
         raise HTTPException(404, "无效文件名")
 
-    if re.fullmatch(r"[0-9a-f]{8}", article_id):
-        article_asset = os.path.join(_ARTICLE_ASSET_DIR, article_id, safe_name)
+    if article_id:
+        _validate_article_id(article_id)
+        article_asset = _contained_path(_ARTICLE_ASSET_DIR, article_id, safe_name)
         if os.path.isfile(article_asset):
             media_type, _ = mimetypes.guess_type(article_asset)
             return FileResponse(
@@ -1068,7 +1504,7 @@ async def api_serve_file(
             )
 
     for search_dir in _IMAGE_SEARCH_DIRS:
-        filepath = os.path.join(search_dir, safe_name)
+        filepath = _contained_path(search_dir, safe_name)
         if os.path.isfile(filepath):
             media_type, _ = mimetypes.guess_type(filepath)
             return FileResponse(filepath, media_type=media_type or "application/octet-stream")

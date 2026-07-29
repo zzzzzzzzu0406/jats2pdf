@@ -2,21 +2,39 @@ import React, { useState, useRef } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, AlertCircle, CheckCircle2, FunctionSquare } from "lucide-react";
 import { useI18n, ContentLangToggle } from "./i18n";
 import { IEEE_DEMO, type IEEEPaperData, type IEEESection } from "./demoIEEE";
+import { JournalFigureMedia } from "./JournalFigureMedia";
+import { escapeXml } from "./xml";
 import {
-  JournalEditorShell, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
+  JournalEditorShell, JournalColumns, getJournalPageLayout, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
   FieldInput, FieldTextarea, SectionLabel, SliderField, ChoiceRow, ExportPanel,
 } from "./shell/JournalEditorShell";
+
+type PageSize = "a4" | "letter";
+type FontFamily = "times" | "helvetica";
+type HeadingStyle = "roman" | "title";
+type FigurePosition = "inline" | "top" | "bottom";
+type CaptionStyle = "below" | "above";
 
 /* ═══════════════════════════════════════════════════════════════════════
    IEEE PAPER PREVIEW  (layout unchanged)
    ═══════════════════════════════════════════════════════════════════════ */
-function IEEEPreview({ paper }: { paper: IEEEPaperData }) {
+function IEEEPreview({ paper, columns, pageSize, fontFamily, headingStyle, figurePosition, tablePosition, captionStyle }: {
+  paper: IEEEPaperData;
+  columns: 1 | 2;
+  pageSize: PageSize;
+  fontFamily: FontFamily;
+  headingStyle: HeadingStyle;
+  figurePosition: FigurePosition;
+  tablePosition: FigurePosition;
+  captionStyle: CaptionStyle;
+}) {
   const lineH = paper.lineSpacing;
   const fs    = paper.fontSize;
   const marginPx = paper.marginSize === "narrow" ? 28 : paper.marginSize === "wide" ? 52 : 38;
+  const fontFamilyCss = fontFamily === "helvetica" ? "Arial, Helvetica, sans-serif" : SERIF;
 
   return (
-    <div id="ieee-preview-root" style={{ fontFamily: SERIF, fontSize: `${fs}pt`, lineHeight: lineH, color: "#000", backgroundColor: "#fff", padding: `${marginPx}px` }}>
+    <div id="ieee-preview-root" style={{ fontFamily: fontFamilyCss, fontSize: `${fs}pt`, lineHeight: lineH, color: "#000", backgroundColor: "#fff", padding: `${marginPx}px`, minHeight: pageSize === "a4" ? 1120 : 1056, boxSizing: "border-box" }}>
 
       {/* ── IEEE HEADER ── */}
       <div style={{ marginBottom: 10 }}>
@@ -76,10 +94,10 @@ function IEEEPreview({ paper }: { paper: IEEEPaperData }) {
 
       {/* ── TWO-COLUMN BODY ── */}
       <div style={{ borderTop: "0.5px solid #000", marginBottom: 8 }} />
-      <div style={{ columns: 2, columnGap: "1.6em", columnRule: "0.5px solid #bbb" }}>
+      <JournalColumns columns={columns}>
         {paper.sections.map((sec, si) => (
           <div key={sec.id} style={{ breakInside: "avoid-column", marginBottom: "0.3em" }}>
-            <h2 style={{ fontFamily: SANS, fontWeight: 700, fontSize: `${fs}pt`, textTransform: "uppercase", letterSpacing: "0.05em", margin: "10px 0 5px", textAlign: "center" }}>
+            <h2 style={{ fontFamily: SANS, fontWeight: 700, fontStyle: headingStyle === "title" ? "normal" : "normal", fontSize: `${fs}pt`, textTransform: headingStyle === "roman" ? "uppercase" : "none", letterSpacing: "0.05em", margin: "10px 0 5px", textAlign: "center" }}>
               {sec.number}. {sec.title}
             </h2>
             {sec.content.split("\n\n").filter(Boolean).map((para, pi) => {
@@ -99,18 +117,21 @@ function IEEEPreview({ paper }: { paper: IEEEPaperData }) {
                 </p>
               );
             })}
-            {paper.figures[si] && (
-              <figure style={{ breakInside: "avoid", margin: "9px 0", textAlign: "center" }}>
-                <div style={{ backgroundColor: paper.figures[si].placeholder, border: "0.5px solid #bbb", padding: "20px 8px", fontSize: "7.5pt", fontFamily: SANS, color: "#555", minHeight: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  [Fig. {paper.figures[si].number} — {paper.figures[si].caption.substring(0, 55)}…]
-                </div>
+            {figurePosition === "inline" && paper.figures[si] && (
+              <figure style={{ breakInside: "avoid", margin: "9px 0", textAlign: "center", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+                <JournalFigureMedia
+                  src={paper.figures[si].src}
+                  alt={paper.figures[si].caption}
+                  placeholder={paper.figures[si].placeholder}
+                  fallbackLabel={`Figure ${paper.figures[si].number} unavailable`}
+                />
                 <figcaption style={{ fontFamily: SANS, fontSize: "7.5pt", color: "#333", marginTop: 4, lineHeight: 1.45, textAlign: "left" }}>
                   <strong>Fig. {paper.figures[si].number}.</strong> {paper.figures[si].caption}
                 </figcaption>
               </figure>
             )}
-            {paper.tables[si] && (
-              <figure style={{ breakInside: "avoid", margin: "9px 0" }}>
+            {tablePosition === "inline" && paper.tables[si] && (
+              <figure style={{ breakInside: "avoid", margin: "9px 0", display: "flex", flexDirection: captionStyle === "above" ? "column" : "column-reverse" }}>
                 <figcaption style={{ fontFamily: SANS, fontSize: "7.5pt", fontWeight: 700, textAlign: "center", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>
                   Table {paper.tables[si].number} — {paper.tables[si].caption}
                 </figcaption>
@@ -136,26 +157,35 @@ function IEEEPreview({ paper }: { paper: IEEEPaperData }) {
             )}
           </div>
         ))}
-        {paper.figures.slice(paper.sections.length).map((fig) => (
-          <figure key={fig.id} style={{ breakInside: "avoid", margin: "9px 0", textAlign: "center" }}>
-            <div style={{ backgroundColor: fig.placeholder, border: "0.5px solid #bbb", padding: "20px 8px", fontSize: "7.5pt", fontFamily: SANS, color: "#555", minHeight: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              [Fig. {fig.number}]
-            </div>
+        {(figurePosition === "inline" ? paper.figures.slice(paper.sections.length) : paper.figures).map((fig) => (
+          <figure key={fig.id} style={{ breakInside: "avoid", margin: "9px 0", textAlign: "center", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+            <JournalFigureMedia src={fig.src} alt={fig.caption} placeholder={fig.placeholder} fallbackLabel={`Figure ${fig.number} unavailable`} />
             <figcaption style={{ fontFamily: SANS, fontSize: "7.5pt", color: "#333", marginTop: 4, lineHeight: 1.45, textAlign: "left" }}>
               <strong>Fig. {fig.number}.</strong> {fig.caption}
             </figcaption>
           </figure>
         ))}
-      </div>
+        {tablePosition !== "inline" && paper.tables.map((tbl) => (
+          <figure key={`table-${tbl.id}`} style={{ breakInside: "avoid", margin: "9px 0", display: "flex", flexDirection: captionStyle === "above" ? "column" : "column-reverse" }}>
+            <figcaption style={{ fontFamily: SANS, fontSize: "7.5pt", fontWeight: 700, textAlign: "center", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>
+              Table {tbl.number} — {tbl.caption}
+            </figcaption>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: SANS, fontSize: "7.5pt" }}>
+              <thead><tr>{tbl.headers.map((h, hi) => <th key={hi} style={{ borderTop: "1px solid #000", borderBottom: "1px solid #000", padding: "2px 4pt", textAlign: "center", fontWeight: 700, fontSize: "7pt" }}>{h}</th>)}</tr></thead>
+              <tbody>{tbl.rows.map((row, ri) => <tr key={ri} style={{ borderBottom: ri === tbl.rows.length - 1 ? "1px solid #000" : "0.5px solid #ddd" }}>{row.cells.map((cell, ci) => <td key={ci} style={{ padding: "2px 4px", textAlign: ci === 0 ? "left" : "center" }}>{cell}</td>)}</tr>)}</tbody>
+            </table>
+          </figure>
+        ))}
+      </JournalColumns>
 
       {/* ── REFERENCES ── */}
       <div style={{ marginTop: 14, paddingTop: 6, borderTop: "0.5px solid #000" }}>
         <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "8pt", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6, textAlign: "center" }}>References</div>
-        <div style={{ columns: 2, columnGap: "1.6em" }}>
+        <JournalColumns columns={columns}>
           {paper.references.map((ref, i) => (
-            <div key={i} style={{ fontFamily: SANS, fontSize: "7pt", lineHeight: 1.55, marginBottom: 4, textAlign: "justify" }}>{ref}</div>
+            <div key={i} style={{ fontFamily: SANS, fontSize: "7pt", lineHeight: 1.55, marginBottom: 4, textAlign: "justify" }}>{paper.citationStyle === "APA" ? ref.replace(/^\s*\[?\d+\]?\.?\s*/, "") : paper.citationStyle === "Vancouver" ? `${i + 1}. ${ref.replace(/^\s*\[?\d+\]?\.?\s*/, "")}` : ref}</div>
           ))}
-        </div>
+        </JournalColumns>
       </div>
 
       {/* ── FOOTER ── */}
@@ -201,6 +231,13 @@ function IEEESectionCard({ sec, onUpdate, onDelete }: {
 export function IEEEPage() {
   const { contentLang: lang, setContentLang: setLang, ui } = useI18n();
   const [paper, setPaper] = useState<IEEEPaperData>(IEEE_DEMO);
+  const [columns, setColumns] = useState<1 | 2>(2);
+  const [pageSize, setPageSize] = useState<PageSize>("letter");
+  const [fontFamily, setFontFamily] = useState<FontFamily>("times");
+  const [headingStyle, setHeadingStyle] = useState<HeadingStyle>("roman");
+  const [figurePosition, setFigurePosition] = useState<FigurePosition>("inline");
+  const [tablePosition, setTablePosition] = useState<FigurePosition>("inline");
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("below");
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   const set = (patch: Partial<IEEEPaperData>) => setPaper((p) => ({ ...p, ...patch }));
@@ -233,7 +270,7 @@ export function IEEEPage() {
   };
 
   const exportXML = () => {
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<article xmlns:xlink="http://www.w3.org/1999/xlink">\n  <front>\n    <journal-meta>\n      <journal-title-group><journal-title>${paper.journal}</journal-title></journal-title-group>\n    </journal-meta>\n    <article-meta>\n      <title-group><article-title>${paper.title}</article-title></title-group>\n      <pub-date pub-type="epub"><year>${paper.year}</year></pub-date>\n      <abstract><p>${paper.abstract}</p></abstract>\n    </article-meta>\n  </front>\n</article>`;
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<article xmlns:xlink="http://www.w3.org/1999/xlink">\n  <front>\n    <journal-meta>\n      <journal-title-group><journal-title>${escapeXml(paper.journal)}</journal-title></journal-title-group>\n    </journal-meta>\n    <article-meta>\n      <title-group><article-title>${escapeXml(paper.title)}</article-title></title-group>\n      <pub-date pub-type="epub"><year>${escapeXml(paper.year)}</year></pub-date>\n      <abstract><p>${escapeXml(paper.abstract)}</p></abstract>\n    </article-meta>\n  </front>\n</article>`;
     const blob = new Blob([xml], { type: "application/xml" });
     Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "article.xml" }).click();
   };
@@ -321,10 +358,11 @@ export function IEEEPage() {
             <button onClick={() => set({ figures: paper.figures.filter((_, j) => j !== i) })} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={11} /></button>
           </div>
           <FieldInput label="Caption" value={fig.caption} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, caption: v }; set({ figures }); }} />
+          <FieldInput label="Image URL" value={fig.src || ""} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, src: v }; set({ figures }); }} mono />
           <FieldInput label="Placeholder color" value={fig.placeholder} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, placeholder: v }; set({ figures }); }} mono />
         </div>
       ))}
-      <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, caption: "", placeholder: "#e0e7ff" }] })}
+      <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, caption: "", placeholder: "#e0e7ff", src: "" }] })}
         style={{ fontFamily: SANS, fontSize: "0.72rem", display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", border: `1px solid ${BORDER}`, borderRadius: 3, backgroundColor: PANEL_BG, color: TEXT, cursor: "pointer", marginBottom: 16 }}>
         <Plus size={12} /> Add Figure
       </button>
@@ -431,8 +469,8 @@ export function IEEEPage() {
     <div>
       <ChoiceRow label="Columns"
         options={[{ value: "2", label: "2 Columns (IEEE)" }, { value: "1", label: "1 Column" }]}
-        value="2"
-        onChange={() => {}}
+        value={String(columns)}
+        onChange={(v) => setColumns(Number(v) as 1 | 2)}
       />
       <ChoiceRow label="Margins"
         options={[{ value: "narrow", label: "Narrow" }, { value: "normal", label: "Normal" }, { value: "wide", label: "Wide" }]}
@@ -441,8 +479,8 @@ export function IEEEPage() {
       />
       <ChoiceRow label="Page size"
         options={[{ value: "letter", label: "US Letter" }, { value: "a4", label: "A4" }]}
-        value="letter"
-        onChange={() => {}}
+        value={pageSize}
+        onChange={(v) => setPageSize(v as PageSize)}
       />
     </div>
   );
@@ -451,8 +489,8 @@ export function IEEEPage() {
     <div>
       <ChoiceRow label="Font family"
         options={[{ value: "times", label: "Times New Roman" }, { value: "helvetica", label: "Helvetica" }]}
-        value="times"
-        onChange={() => {}}
+        value={fontFamily}
+        onChange={(v) => setFontFamily(v as FontFamily)}
       />
       <SliderField label="Font size" value={paper.fontSize} min={8} max={13} step={0.5} unit="pt" onChange={(v) => set({ fontSize: v })} />
       <SliderField label="Line spacing" value={paper.lineSpacing} min={1} max={2} step={0.05} onChange={(v) => set({ lineSpacing: v })} />
@@ -468,8 +506,8 @@ export function IEEEPage() {
       />
       <ChoiceRow label="Heading style"
         options={[{ value: "roman", label: "Uppercase Roman" }, { value: "title", label: "Title Case" }]}
-        value="roman"
-        onChange={() => {}}
+        value={headingStyle}
+        onChange={(v) => setHeadingStyle(v as HeadingStyle)}
       />
     </div>
   );
@@ -478,18 +516,18 @@ export function IEEEPage() {
     <div>
       <ChoiceRow label="Figure position"
         options={[{ value: "inline", label: "Inline" }, { value: "top", label: "Top of col." }, { value: "bottom", label: "Bottom" }]}
-        value="inline"
-        onChange={() => {}}
+        value={figurePosition}
+        onChange={(v) => setFigurePosition(v as FigurePosition)}
       />
       <ChoiceRow label="Table position"
         options={[{ value: "inline", label: "Inline" }, { value: "top", label: "Top of col." }, { value: "bottom", label: "Bottom" }]}
-        value="inline"
-        onChange={() => {}}
+        value={tablePosition}
+        onChange={(v) => setTablePosition(v as FigurePosition)}
       />
       <ChoiceRow label="Caption style"
         options={[{ value: "below", label: "Below item" }, { value: "above", label: "Above item" }]}
-        value="below"
-        onChange={() => {}}
+        value={captionStyle}
+        onChange={(v) => setCaptionStyle(v as CaptionStyle)}
       />
     </div>
   );
@@ -552,6 +590,7 @@ export function IEEEPage() {
           accentColor: "#00629b",
           type: "ieee",
         }}
+        pageLayout={getJournalPageLayout("ieee", pageSize)}
         actions={{
           onExportPDF: () => window.print(),
           onExportWord: exportWord,
@@ -566,7 +605,7 @@ export function IEEEPage() {
           layout: layoutTabPanel,
           export: exportTabPanel,
         }}
-        preview={<IEEEPreview paper={paper} />}
+        preview={<IEEEPreview paper={paper} columns={columns} pageSize={pageSize} fontFamily={fontFamily} headingStyle={headingStyle} figurePosition={figurePosition} tablePosition={tablePosition} captionStyle={captionStyle} />}
         rightPanelSections={{
           layout:        rpLayout,
           typography:    rpTypography,

@@ -1,3 +1,5 @@
+import { DEMO_FIGURE_ASSETS } from "./demoFigureAssets";
+
 export interface NatureAuthor {
   name: string;
   affKeys: string[];
@@ -23,6 +25,7 @@ export interface NatureFigure {
   title: string;
   caption: string;
   placeholder: string;
+  src?: string;
 }
 
 export interface NatureTable {
@@ -166,6 +169,7 @@ Statistical analyses. Logistic regression models for bleaching incidence include
       title: "Symbiont shuffling prevalence and community composition across bleaching tolerance categories.",
       caption: "a, Proportion of thermally tolerant versus susceptible coral colonies exhibiting symbiont shuffling (≥20% change in any Symbiodiniaceae genus) between pre-bleaching baseline and acute bleaching peak sampling timepoints. Error bars show 95% confidence intervals. n = 1,847 tolerant, n = 2,280 susceptible colonies. b, Ternary plot of Symbiodiniaceae community composition at three timepoints for shuffling-tolerant (blue), non-shuffling tolerant (green), and susceptible (red) colonies. Vertices represent Cladocopium, Durusdinium, and all other genera. c, Geographic map of all 23 reef systems with pie charts indicating the proportion of sampled colonies in each shuffling category.",
       placeholder: "#dbeafe",
+      src: DEMO_FIGURE_ASSETS.nature[0],
     },
     {
       id: "f2",
@@ -173,6 +177,7 @@ Statistical analyses. Logistic regression models for bleaching incidence include
       title: "Five-year survival of coral colonies stratified by symbiont shuffling outcome.",
       caption: "Kaplan–Meier survival curves for colonies that underwent successful symbiont shuffling toward thermally resistant genera (blue, n = 892), colonies that experienced shuffling without enrichment of resistant genera (orange, n = 248), and non-shuffling thermally susceptible colonies (red, n = 2,280). Shaded regions indicate 95% confidence intervals. Tick marks denote censored observations. Log-rank P < 0.0001 for all pairwise comparisons.",
       placeholder: "#dcfce7",
+      src: DEMO_FIGURE_ASSETS.nature[1],
     },
     {
       id: "f3",
@@ -180,6 +185,7 @@ Statistical analyses. Logistic regression models for bleaching incidence include
       title: "Transgenerational heritability of shuffling-derived thermal tolerance in Acropora millepora.",
       caption: "a, Experimental design for F1 offspring thermal challenge assay. Gametes from shuffled (Dur-enriched) and non-shuffled (Clad-dominated) parents were separately fertilized and reared under identical conditions before inoculation with standardized Symbiodiniaceae suspensions at larval settlement. b, Proportion of settled juveniles harboring Durusdinium trenchii as dominant symbiont at 6 months post-settlement. c, 30-day survival of F1 juveniles under acute thermal stress (32°C, 7 days). Box plots show median, interquartile range, and 1.5× IQR whiskers; individual datapoints overlaid. ***P < 0.001, ****P < 0.0001 (Mann–Whitney U test).",
       placeholder: "#fce7f3",
+      src: DEMO_FIGURE_ASSETS.nature[2],
     },
   ],
 

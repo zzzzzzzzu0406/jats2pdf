@@ -11,6 +11,7 @@
 - 解析标题、作者、机构、双语摘要、关键词、章节、图表、公式、交叉引用和参考文献。
 - 门户预览与后端 PDF 使用同一份 `article_preview.html`，减少预览和导出的样式差异。
 - 支持单栏/双栏、Elsevier/GB-T 7714、字体风格和字号切换。
+- 四个期刊工作台支持期刊级分页：Elsevier/Springer/Nature 默认 A4，IEEE 默认 Letter，并可在真实编辑器中切换纸张与导出。
 - 双栏样式参考《计算机学报》：标题/作者/摘要通栏，正文双栏，图表默认栏内排版。
 - PDF 导出前自动嵌入、旋转校正和压缩图片，避免远程图片缺失或超大图片拖慢渲染。
 - 完整文章工作台支持编辑基础信息、摘要、关键词、章节、图表和参考文献，并可切换中英预览、单双栏、PDF 打印和 Word 导出。
@@ -114,7 +115,7 @@ npm install --prefix ~/mjnode mathjax-node@2.1.1
 | `PUT` | `/api/articles/{id}/editor` | 保存编辑器修改 |
 | `GET` | `/api/articles/{id}/preview` | 自包含 HTML 预览 |
 | `GET` | `/api/articles/{id}/html` | 下载 HTML |
-| `GET` | `/api/articles/{id}/pdf` | 生成并下载后端 PDF |
+| `GET` | `/api/articles/{id}/pdf` | 生成并下载后端 PDF（支持 `page_size=a4|letter`） |
 | `GET` | `/api/filters` | 可用筛选项 |
 | `GET` | `/api/health` | 服务状态 |
 
@@ -131,8 +132,10 @@ npm install --prefix ~/mjnode mathjax-node@2.1.1
 │   ├── server.py                     # FastAPI 页面与 API
 │   └── store.py                      # SQLite / pickle 文章存储
 ├── web/
-│   ├── upload/                       # React 上传门户与文章库
-│   └── article/                      # React 文章编辑工作台
+│   ├── src/app/PortalApp.tsx         # React 上传门户
+│   ├── src/app/ArticleEditorPage.tsx # 真实文章编辑工作台
+│   ├── src/app/routes.tsx            # React Router 路由
+│   └── src/app/shell/                # 共享编辑器外壳与控件
 ├── assets/                           # Jinja 回退页面静态资源
 ├── samples/                          # 示例与真实 JATS XML
 ├── tests/                            # Python 单元与集成测试
@@ -151,7 +154,7 @@ python -m pip install -r requirements-dev.txt
 npm run web:build
 ```
 
-当前共 38 项测试，覆盖 JATS 解析、模板渲染、公式处理、文章存储、上传限制、ZIP 图片、PMC 图片回退、PDF 图片嵌入，以及预览/PDF 共用文档等关键路径。
+当前共 42 项测试，覆盖 JATS 解析、模板渲染、公式处理、文章存储、上传限制、ZIP 图片、PMC 图片回退、PDF 图片嵌入、编辑保存回读、路径安全，以及预览/PDF 共用文档等关键路径。前端可用 `npm run typecheck` 做 TypeScript 检查。
 
 ## 技术栈
 

@@ -1,4 +1,5 @@
 import type { PaperData } from "./types";
+import { DEMO_FIGURE_ASSETS } from "./demoFigureAssets";
 
 export const DEMO: PaperData = {
   journal: "Expert Systems with Applications",
@@ -104,11 +105,13 @@ export const DEMO: PaperData = {
       id: "f1", number: 1,
       caption: { en: "Overall architecture of ITE. The three-stage pipeline processes JATS XML through semantic parsing, constraint-optimised layout planning, and high-fidelity PDF rendering.", zh: "ITE 整体架构。三阶段流水线通过语义解析、约束优化版面规划和高保真 PDF 渲染处理 JATS XML。" },
       placeholder: "#dbeafe",
+      src: DEMO_FIGURE_ASSETS.elsevier[0],
     },
     {
       id: "f2", number: 2,
       caption: { en: "Layout Quality Score (LQS) by domain for ITE and baseline methods. Error bars show standard deviation over 5-fold cross-validation.", zh: "ITE 和基线方法按领域的版面质量分（LQS）。误差线为5折交叉验证的标准差。" },
       placeholder: "#dcfce7",
+      src: DEMO_FIGURE_ASSETS.elsevier[1],
     },
   ],
   tables: [

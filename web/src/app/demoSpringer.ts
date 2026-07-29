@@ -1,3 +1,5 @@
+import { DEMO_FIGURE_ASSETS } from "./demoFigureAssets";
+
 export interface SpringerAuthor {
   name: string;
   affKeys: string[];
@@ -22,6 +24,7 @@ export interface SpringerFigure {
   number: number;
   caption: string;
   placeholder: string;
+  src?: string;
 }
 
 export interface SpringerTable {
@@ -202,18 +205,21 @@ We anticipate that HiCoGNN will prove particularly valuable in early-stage drug 
       number: 1,
       caption: "AUC-ROC performance comparison under 5-shot and 10-shot settings across classification benchmarks. HiCoGNN (blue) consistently outperforms baselines at both data regimes. Error bars indicate 95% confidence intervals over 5 random seeds.",
       placeholder: "#dbeafe",
+      src: DEMO_FIGURE_ASSETS.springer[0],
     },
     {
       id: "f2",
       number: 2,
       caption: "Schematic of the HiCoGNN architecture. (a) Three-level molecular hierarchy construction from a SMILES string. (b) Level-specific GNN encoders with inter-level message passing. (c) Multi-level contrastive objectives applied during pre-training. (d) MAML outer loop for few-shot adaptation.",
       placeholder: "#dcfce7",
+      src: DEMO_FIGURE_ASSETS.springer[1],
     },
     {
       id: "f3",
       number: 3,
       caption: "t-SNE visualization of molecular embeddings from HiCoGNN (right) versus flat GNN baseline (left) on the BACE dataset. HiCoGNN embeddings exhibit cleaner class separation and more semantically meaningful clustering of similar scaffold families.",
       placeholder: "#fef9c3",
+      src: DEMO_FIGURE_ASSETS.springer[2],
     },
   ],
 

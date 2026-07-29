@@ -33,9 +33,20 @@ export interface FigureItem {
   number: number;
   caption: BiText;
   placeholder: string; // visual description / colour placeholder
+  src?: string;
+  sectionId?: string;
+  order?: number;
 }
 
 export interface TableRow { cells: string[] }
+
+export interface TableCell {
+  text: string;
+  colspan?: number;
+  rowspan?: number;
+  isHeader?: boolean;
+  align?: "left" | "center" | "right" | "char" | string;
+}
 
 export interface TableItem {
   id: string;
@@ -43,6 +54,11 @@ export interface TableItem {
   caption: BiText;
   headers: string[];
   rows: TableRow[];
+  headerRows?: TableCell[][];
+  bodyRows?: TableCell[][];
+  footnotes?: string[];
+  sectionId?: string;
+  order?: number;
 }
 
 export interface PaperData {

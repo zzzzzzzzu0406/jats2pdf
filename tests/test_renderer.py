@@ -91,6 +91,19 @@ class TestHTMLRenderer:
         html = HTMLRenderer().render_article(article, asset_mode="web")
         assert "/api/files/amiajnl-2011-000217fig1.jpg?pmcid=PMC3128412" in html
 
+    def test_web_image_url_encodes_filename_once(self):
+        article = JATSParser(SAMPLE_PATH).parse()
+        figure = article.sections[2].subsections[0].figures[0]
+        figure.graphic_href = "images/figure one.jpg"
+        html = HTMLRenderer().render_article(article, asset_mode="web")
+        assert "/api/files/figure%20one.jpg" in html
+        assert "%2520" not in html
+
+    def test_web_images_are_eager_loaded_for_preview_and_print(self):
+        article = JATSParser(SAMPLE_PATH).parse()
+        html = HTMLRenderer().render_article(article, asset_mode="web")
+        assert 'loading="eager"' in html
+
     def test_structured_table_render_and_legacy_fallback(self):
         """结构化表格输出跨格/表注，旧 pickle 对象仍可渲染。"""
         real_path = os.path.join(

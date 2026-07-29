@@ -1,3 +1,5 @@
+import { DEMO_FIGURE_ASSETS } from "./demoFigureAssets";
+
 export interface IEEEAuthor {
   name: string;
   member?: string; // e.g. "Senior Member, IEEE"
@@ -18,6 +20,7 @@ export interface IEEEFigure {
   number: number;
   caption: string;
   placeholder: string;
+  src?: string;
   width?: "full" | "half";
 }
 
@@ -247,6 +250,7 @@ Future work will explore extending AdaFedge to asynchronous communication protoc
       number: 1,
       caption: "Validation accuracy curves on CIFAR-100 ($\\alpha_{\\text{Dir}} = 0.1$, $N = 100$ clients) over 500 communication rounds. AdaFedge reaches 90% of its converged accuracy 2.3× faster than FedAvg.",
       placeholder: "#dbeafe",
+      src: DEMO_FIGURE_ASSETS.ieee[0],
       width: "full",
     },
     {
@@ -254,6 +258,7 @@ Future work will explore extending AdaFedge to asynchronous communication protoc
       number: 2,
       caption: "Architecture of the AdaFedge framework. Each client computes a local heterogeneity metric $\\mathcal{H}_k$ and adapts its learning rate before performing local SGD. The server aggregates updates using quality weights derived from $\\mathcal{H}_k$.",
       placeholder: "#dcfce7",
+      src: DEMO_FIGURE_ASSETS.ieee[1],
       width: "full",
     },
     {
@@ -261,6 +266,7 @@ Future work will explore extending AdaFedge to asynchronous communication protoc
       number: 3,
       caption: "Effect of the Dirichlet concentration parameter $\\alpha_{\\text{Dir}}$ on AdaFedge vs. baselines. Lower $\\alpha_{\\text{Dir}}$ corresponds to more severe data heterogeneity.",
       placeholder: "#fef9c3",
+      src: DEMO_FIGURE_ASSETS.ieee[2],
       width: "half",
     },
   ],

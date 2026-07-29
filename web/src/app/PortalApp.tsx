@@ -1,8 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import katex from "katex";
 import "katex/dist/katex.min.css";
-import { useI18n, LangToggle } from "./i18n";
+import { useI18n, type UiLang } from "./i18n";
 import {
   Upload,
   FileText,
@@ -373,6 +373,7 @@ function KatexSpan({ latex, display = false }: { latex: string; display?: boolea
 // ─── homepage data ────────────────────────────────────────────────────────────
 
 type TemplateId = "ieee" | "elsevier" | "springer" | "nature";
+type LegalTopic = "privacy" | "terms" | "contact";
 
 interface JournalTemplate {
   id: TemplateId;
@@ -444,100 +445,64 @@ const STEPS = [
   { num: "06", icon: Download,       en: "Export PDF",               zh: "导出 PDF" },
 ];
 
-const NAV_LINKS = {
-  en: ["Home", "Templates", "Features", "Pricing"],
-  zh: ["首页", "模板库", "功能特性", "定价"],
-};
-
 // ─── homepage ─────────────────────────────────────────────────────────────────
 
-function UploadScreen({ onLoad }: { onLoad: () => void }) {
+function UploadScreen({ onLoad, onSubmit }: { onLoad: () => void; onSubmit: (file: File, template: TemplateId) => Promise<void> }) {
   const { ui: lang } = useI18n();
+  const navigate = useNavigate();
   const [dragging, setDragging] = useState(false);
   const [uploaded, setUploaded] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId | null>(null);
   const [translationAdded, setTranslationAdded] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [legalTopic, setLegalTopic] = useState<LegalTopic | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const selectFile = useCallback((file: File) => {
+    setSelectedFile(file);
+    setUploaded(true);
+    setUploadError("");
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    setUploaded(true);
-  }, []);
+    const file = e.dataTransfer.files[0];
+    if (file) selectFile(file);
+  }, [selectFile]);
 
   const selectedTpl = TEMPLATES.find((t) => t.id === selectedTemplate);
   const templatePrice = selectedTpl?.price ?? 0;
   const totalPrice = templatePrice + (translationAdded ? TRANSLATION_PRICE : 0);
 
-  const canProceed = uploaded && selectedTemplate !== null;
+  const canProceed = selectedFile !== null && selectedTemplate !== null && !submitting;
+  const legalContent = legalTopic === "privacy"
+    ? {
+        title: lang === "zh" ? "隐私政策" : "Privacy Policy",
+        body: lang === "zh"
+          ? "本地预览只在当前浏览器中处理您选择的稿件。上传接口仅在您点击“提交并编辑”后接收文件，页面不会主动读取未选择的文件，也不会把编辑状态写入第三方服务。"
+          : "The local preview processes selected manuscripts in this browser. The upload endpoint receives a file only after you choose Submit & edit; the page does not read unselected files or send editor state to third-party services.",
+      }
+    : legalTopic === "terms"
+    ? {
+        title: lang === "zh" ? "服务条款" : "Terms of Service",
+        body: lang === "zh"
+          ? "本工具用于学术稿件的版面预览与格式转换。提交前请确认您拥有稿件及其中图片、数据和文字的处理权限；生成结果仍需由作者按照目标期刊最新指南复核。"
+          : "This tool provides layout preview and format conversion for academic manuscripts. Before submitting, confirm that you have permission to process the manuscript, images, data, and text; authors remain responsible for checking the output against the target journal's latest guidelines.",
+      }
+    : legalTopic === "contact"
+    ? {
+        title: lang === "zh" ? "联系我们" : "Contact",
+        body: lang === "zh"
+          ? "如需反馈问题或提交改进建议，请在项目仓库创建 Issue。请不要在公开 Issue 中上传包含未公开研究内容的稿件。"
+          : "For bug reports and improvement suggestions, create an issue in the project repository. Do not upload unpublished research content to a public issue.",
+      }
+    : null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col font-['Inter']">
-
-      {/* ── sticky nav ── */}
-      <header className="sticky top-0 z-30 bg-background border-b border-border">
-        <div className="max-w-7xl mx-auto px-6 h-12 flex items-center gap-5">
-          {/* brand */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            <BookOpen size={16} className="text-primary" strokeWidth={1.5} />
-            <div className="leading-none">
-              <span className="font-['EB_Garamond'] text-[15px] font-semibold text-primary tracking-tight">
-                ScholarFormat
-              </span>
-            </div>
-          </div>
-          <div className="hidden sm:block w-px h-4 bg-border" />
-          <span className="hidden sm:block text-[9.5px] font-['Inter'] text-muted-foreground/70 tracking-[0.12em] uppercase">
-            JATS XML Academic Publishing Infrastructure
-          </span>
-
-          {/* nav links desktop */}
-          <nav className="hidden md:flex items-center gap-0 ml-auto">
-            {NAV_LINKS[lang].map((link, i) => (
-              <button
-                key={i}
-                className={[
-                  "px-3 h-12 text-[11px] font-['Inter'] font-medium transition-colors border-b-2",
-                  i === 0
-                    ? "text-primary border-primary"
-                    : "text-muted-foreground border-transparent hover:text-foreground hover:border-border",
-                ].join(" ")}
-              >
-                {link}
-              </button>
-            ))}
-          </nav>
-
-          <div className="flex items-center gap-2 md:ml-4 ml-auto">
-            <LangToggle />
-            <div className="hidden sm:flex items-center gap-1">
-              <button className="px-3 py-1.5 text-[11px] font-['Inter'] font-medium text-muted-foreground hover:text-foreground transition-colors">
-                {lang === "zh" ? "登录" : "Login"}
-              </button>
-              <button className="px-3 py-1.5 text-[11px] font-['Inter'] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-                {lang === "zh" ? "注册" : "Sign Up"}
-              </button>
-            </div>
-            <button
-              className="md:hidden p-1.5 text-muted-foreground hover:text-foreground"
-              onClick={() => setMobileMenuOpen((v) => !v)}
-            >
-              <Menu size={16} />
-            </button>
-          </div>
-        </div>
-        {/* mobile menu */}
-        {mobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-background px-6 py-3 flex flex-col gap-0">
-            {NAV_LINKS[lang].map((link, i) => (
-              <button key={i} className="text-left px-2 py-2 text-xs font-['Inter'] text-foreground/70 hover:text-foreground border-b border-border/40 last:border-0">
-                {link}
-              </button>
-            ))}
-          </div>
-        )}
-      </header>
+    <div className="h-full min-h-0 overflow-y-auto bg-background flex flex-col font-['Inter']">
 
       {/* ── hero ── */}
       <section className="bg-background border-b border-border">
@@ -587,7 +552,11 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
               <Upload size={14} strokeWidth={1.5} />
               {lang === "zh" ? "上传稿件" : "Upload Manuscript"}
             </button>
-            <button className="flex items-center gap-2 px-7 py-3 text-[13px] font-['Inter'] font-medium text-foreground/55 border border-border hover:border-primary/30 hover:text-primary transition-colors">
+            <button
+              type="button"
+              onClick={() => document.getElementById("publication-templates")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="flex items-center gap-2 px-7 py-3 text-[13px] font-['Inter'] font-medium text-foreground/55 border border-border hover:border-primary/30 hover:text-primary transition-colors"
+            >
               <FileSearch size={14} strokeWidth={1.5} />
               {lang === "zh" ? "浏览出版模板" : "Browse Templates"}
             </button>
@@ -602,7 +571,7 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
         <div className="flex-1 min-w-0 flex flex-col gap-8">
 
           {/* §1 upload */}
-          <section>
+          <section id="publication-templates" className="scroll-mt-20">
             <SectionLabel num="01" lang={lang} en="Upload Manuscript" zh="上传稿件" />
             <p className="font-['EB_Garamond'] text-base text-muted-foreground/70 leading-relaxed mb-6 max-w-md italic">
               {lang === "zh"
@@ -624,7 +593,7 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
                   : "border-border hover:border-foreground/25 hover:bg-muted/20",
               ].join(" ")}
             >
-              <input ref={fileRef} type="file" className="hidden" accept=".xml,.docx,.pdf,.txt" onChange={() => setUploaded(true)} />
+              <input ref={fileRef} type="file" className="hidden" accept=".xml,.zip" onChange={(event) => { const file = event.target.files?.[0]; if (file) selectFile(file); event.currentTarget.value = ""; }} />
 
               <div className={[
                 "w-11 h-11 rounded-full flex items-center justify-center transition-colors",
@@ -643,7 +612,7 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
                 </p>
                 {uploaded ? (
                   <p className="font-['Inter'] text-[11.5px] text-primary/55 tracking-wide">
-                    manuscript_draft.docx &ensp;·&ensp; 1.2 MB
+                    {selectedFile?.name || "manuscript.xml"} &ensp;·&ensp; {(selectedFile ? selectedFile.size / 1024 / 1024 : 0).toFixed(2)} MB
                   </p>
                 ) : (
                   <p className="font-['Inter'] text-[11.5px] text-muted-foreground/50 tracking-wide">
@@ -657,14 +626,18 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
               </div>
 
               {!uploaded && (
-                <button className="px-6 py-2 text-[12.5px] font-['Inter'] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors tracking-wide">
+                <button
+                  type="button"
+                  onClick={(event) => { event.stopPropagation(); fileRef.current?.click(); }}
+                  className="px-6 py-2 text-[12.5px] font-['Inter'] font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors tracking-wide"
+                >
                   {lang === "zh" ? "选择文件" : "Select file"}
                 </button>
               )}
               {uploaded && (
                 <button
                   className="font-['Inter'] text-[11.5px] text-muted-foreground/40 hover:text-muted-foreground transition-colors tracking-wide"
-                  onClick={(e) => { e.stopPropagation(); setUploaded(false); }}
+                  onClick={(e) => { e.stopPropagation(); setUploaded(false); setSelectedFile(null); setUploadError(""); }}
                 >
                   {lang === "zh" ? "重新上传" : "Replace file"}
                 </button>
@@ -721,19 +694,30 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
                     </ul>
 
                     <div className="flex items-center justify-between pt-3.5 border-t border-border/40 mt-auto">
-                      <button
-                        onClick={() => setSelectedTemplate(selected ? null : tpl.id)}
-                        className={[
-                          "font-['Inter'] text-[12px] font-medium px-5 py-1.5 transition-colors tracking-wide",
-                          selected
-                            ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                            : "border border-border text-foreground/60 hover:border-primary/40 hover:text-primary",
-                        ].join(" ")}
-                      >
-                        {selected
-                          ? (lang === "zh" ? "已选择" : "Selected")
-                          : (lang === "zh" ? "选择" : "Select")}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedTemplate(selected ? null : tpl.id)}
+                          className={[
+                            "font-['Inter'] text-[12px] font-medium px-5 py-1.5 transition-colors tracking-wide",
+                            selected
+                              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                              : "border border-border text-foreground/60 hover:border-primary/40 hover:text-primary",
+                          ].join(" ")}
+                        >
+                          {selected
+                            ? (lang === "zh" ? "已选择" : "Selected")
+                            : (lang === "zh" ? "选择" : "Select")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => { event.stopPropagation(); navigate(`/samples/${tpl.id}`); }}
+                          className="inline-flex items-center gap-1 font-['Inter'] text-[11px] font-medium text-muted-foreground/60 hover:text-primary transition-colors tracking-wide"
+                          title={lang === "zh" ? `查看 ${tpl.name} 样例` : `View ${tpl.name} sample`}
+                        >
+                          {lang === "zh" ? "查看样例" : "View sample"}
+                          <ArrowRight size={11} strokeWidth={1.6} />
+                        </button>
+                      </div>
                       <span className="font-['EB_Garamond'] text-[14px] text-muted-foreground/40">
                         ${tpl.price}
                         <span className="font-['Inter'] text-[9px] ml-0.5">{lang === "zh" ? "/篇" : "/art."}</span>
@@ -956,7 +940,18 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
 
                 {/* cta */}
                 <button
-                  onClick={canProceed ? onLoad : undefined}
+                  onClick={canProceed ? async () => {
+                    if (!selectedFile || !selectedTemplate) return;
+                    setSubmitting(true);
+                    setUploadError("");
+                    try {
+                      await onSubmit(selectedFile, selectedTemplate);
+                    } catch (error) {
+                      setUploadError(error instanceof Error ? error.message : (lang === "zh" ? "上传失败" : "Upload failed"));
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  } : undefined}
                   disabled={!canProceed}
                   className={[
                     "w-full flex items-center justify-center gap-2 py-2.5 text-[13px] font-['Inter'] font-medium rounded transition-all duration-200",
@@ -966,8 +961,10 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
                   ].join(" ")}
                 >
                   <CreditCard size={14} strokeWidth={1.5} />
-                  {lang === "zh" ? "提交并付款" : "Proceed to Payment"}
+                  {submitting ? (lang === "zh" ? "上传中…" : "Uploading…") : (lang === "zh" ? "提交并编辑" : "Submit & edit")}
                 </button>
+
+                {uploadError && <p className="font-['Inter'] text-[10.5px] text-red-700 text-center">{uploadError}</p>}
 
                 {!canProceed && (
                   <p className="font-['Inter'] text-[10.5px] text-muted-foreground/40 text-center -mt-2">
@@ -1076,16 +1073,63 @@ function UploadScreen({ onLoad }: { onLoad: () => void }) {
           © 2024 Nanjing University · JATS XML · ANSI/NISO Z39.96
         </p>
         <div className="flex gap-5">
-          {(lang === "zh"
-            ? ["隐私政策", "服务条款", "联系我们"]
-            : ["Privacy", "Terms", "Contact"]
-          ).map((l) => (
-            <button key={l} className="font-['Inter'] text-[10px] text-muted-foreground/35 hover:text-muted-foreground transition-colors">
-              {l}
+          {([
+            { key: "privacy" as const, zh: "隐私政策", en: "Privacy" },
+            { key: "terms" as const, zh: "服务条款", en: "Terms" },
+            { key: "contact" as const, zh: "联系我们", en: "Contact" },
+          ]).map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setLegalTopic(item.key)}
+              className="font-['Inter'] text-[10px] text-muted-foreground/35 hover:text-muted-foreground transition-colors"
+            >
+              {lang === "zh" ? item.zh : item.en}
             </button>
           ))}
         </div>
       </footer>
+
+      {legalContent && (
+        <div
+          role="presentation"
+          onClick={(event) => { if (event.target === event.currentTarget) setLegalTopic(null); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-5"
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="portal-legal-title"
+            className="relative w-full max-w-lg border border-border bg-background p-6 shadow-xl"
+          >
+            <button
+              type="button"
+              onClick={() => setLegalTopic(null)}
+              aria-label={lang === "zh" ? "关闭" : "Close"}
+              className="absolute right-3 top-3 grid h-7 w-7 place-items-center text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+            >
+              <X size={15} />
+            </button>
+            <h2 id="portal-legal-title" className="font-['Playfair_Display'] text-2xl font-normal text-foreground">
+              {legalContent.title}
+            </h2>
+            <p className="mt-4 font-['Inter'] text-[13px] leading-7 text-muted-foreground">
+              {legalContent.body}
+            </p>
+            {legalTopic === "contact" && (
+              <a
+                href="https://github.com/zzzzzzzzu0406/jats2pdf/issues/new"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-5 inline-flex items-center gap-1.5 border border-border px-3 py-2 font-['Inter'] text-[12px] text-foreground/70 hover:border-primary/40 hover:text-primary"
+              >
+                {lang === "zh" ? "打开项目反馈入口" : "Open project feedback"}
+                <ArrowRight size={12} />
+              </a>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -1262,7 +1306,7 @@ function PaperViewer({
   }, [flatSections]);
 
   return (
-    <div className="h-screen bg-muted/20 flex flex-col overflow-hidden">
+    <div className="h-full min-h-0 bg-muted/20 flex flex-col overflow-hidden">
       {/* toolbar */}
       <header className="bg-background border-b border-border px-5 py-3 flex items-center gap-3 shrink-0 z-20">
         <button
@@ -1599,9 +1643,21 @@ function SectionHeading({ section, lang }: { section: Section; lang: UiLang }) {
 
 export default function App() {
   const [view, setView] = useState<"upload" | "viewer">("upload");
+  const navigate = useNavigate();
+
+  const submitUpload = async (file: File, template: TemplateId) => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch("/api/upload", { method: "POST", body: form });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.detail || ("Upload failed (" + response.status + ")"));
+    }
+    navigate(`/studio/editor?article=${encodeURIComponent(payload.article_id)}&journal=${template}`);
+  };
 
   return view === "upload" ? (
-    <UploadScreen onLoad={() => setView("viewer")} />
+    <UploadScreen onLoad={() => setView("viewer")} onSubmit={submitUpload} />
   ) : (
     <PaperViewer paper={PAPER} onClose={() => setView("upload")} />
   );

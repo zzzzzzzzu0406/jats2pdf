@@ -2,10 +2,19 @@ import React, { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useI18n, ContentLangToggle } from "./i18n";
 import { NATURE_DEMO, type NaturePaperData, type NatureSection } from "./demoNature";
+import { JournalFigureMedia } from "./JournalFigureMedia";
+import { escapeXml } from "./xml";
 import {
-  JournalEditorShell, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
+  JournalEditorShell, JournalColumns, getJournalPageLayout, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
   FieldInput, FieldTextarea, SectionLabel, SliderField, ChoiceRow, ExportPanel,
 } from "./shell/JournalEditorShell";
+
+type MarginSize = "narrow" | "normal" | "wide";
+type PageSize = "a4" | "letter";
+type FontFamily = "times" | "harding" | "georgia";
+type HeadingStyle = "bold" | "italic";
+type FigurePosition = "inline" | "end";
+type CaptionStyle = "below" | "above";
 
 /* ═══════════════════════════════════════════════════════════════════════
    NATURE PAPER PREVIEW
@@ -13,13 +22,23 @@ import {
 const NATURE_RED  = "#c0000a";
 const NATURE_DARK = "#111111";
 
-function NaturePreview({ paper, fontSize, lineSpacing }: {
+function NaturePreview({ paper, fontSize, lineSpacing, columns, marginSize, pageSize, fontFamily, headingStyle, figurePosition, tablePosition, captionStyle }: {
   paper: NaturePaperData;
   fontSize: number;
   lineSpacing: number;
+  columns: 1 | 2;
+  marginSize: MarginSize;
+  pageSize: PageSize;
+  fontFamily: FontFamily;
+  headingStyle: HeadingStyle;
+  figurePosition: FigurePosition;
+  tablePosition: FigurePosition;
+  captionStyle: CaptionStyle;
 }) {
+  const fontFamilyCss = fontFamily === "harding" ? "'Harding', Georgia, serif" : fontFamily === "georgia" ? "Georgia, serif" : SERIF;
+  const marginPx = marginSize === "narrow" ? 38 : marginSize === "wide" ? 72 : 56;
   return (
-    <div id="nature-preview-root" style={{ fontFamily: SERIF, fontSize: `${fontSize}pt`, lineHeight: lineSpacing, color: NATURE_DARK, backgroundColor: "#fff", padding: "40px 56px 52px" }}>
+    <div id="nature-preview-root" style={{ fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, lineHeight: lineSpacing, color: NATURE_DARK, backgroundColor: "#fff", padding: `40px ${marginPx}px 52px`, minHeight: pageSize === "a4" ? 1120 : 1056, boxSizing: "border-box" }}>
 
       {/* ── JOURNAL NAMEPLATE ── */}
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, borderBottom: `2px solid ${NATURE_DARK}`, paddingBottom: 8 }}>
@@ -110,7 +129,7 @@ function NaturePreview({ paper, fontSize, lineSpacing }: {
         <p style={{ fontFamily: SANS, fontWeight: 700, fontSize: "8pt", color: "#000", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           Abstract
         </p>
-        <p style={{ margin: 0, fontFamily: SERIF, fontSize: `${fontSize}pt`, textAlign: "justify", lineHeight: lineSpacing, color: NATURE_DARK }}>
+        <p style={{ margin: 0, fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, textAlign: "justify", lineHeight: lineSpacing, color: NATURE_DARK }}>
           {paper.abstract}
         </p>
       </div>
@@ -118,30 +137,29 @@ function NaturePreview({ paper, fontSize, lineSpacing }: {
       {/* ── RULE ── */}
       <div style={{ borderTop: "1px solid #ccc", marginBottom: 16 }} />
 
-      {/* ── BODY (single column, wide) ── */}
+      {/* ── BODY ── */}
+      <JournalColumns columns={columns}>
       {paper.sections.map((sec, si) => (
         <div key={sec.id} style={{ marginBottom: "1.2em" }}>
-          <h2 style={{ fontFamily: SANS, fontWeight: 700, fontSize: `${fontSize + 1.5}pt`, color: NATURE_DARK, margin: "18px 0 7px", lineHeight: 1.3 }}>
+          <h2 style={{ fontFamily: SANS, fontWeight: headingStyle === "italic" ? 600 : 700, fontStyle: headingStyle === "italic" ? "italic" : "normal", fontSize: `${fontSize + 1.5}pt`, color: NATURE_DARK, margin: "18px 0 7px", lineHeight: 1.3 }}>
             {sec.title}
           </h2>
           {sec.content.split("\n\n").filter(Boolean).map((para, pi) => (
-            <p key={pi} style={{ margin: "0 0 8px", textAlign: "justify", fontFamily: SERIF, fontSize: `${fontSize}pt`, lineHeight: lineSpacing }}>
+            <p key={pi} style={{ margin: "0 0 8px", textAlign: "justify", fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, lineHeight: lineSpacing }}>
               {para.trim()}
             </p>
           ))}
-          {paper.figures[si] && (
-            <figure style={{ margin: "18px 0" }}>
-              <div style={{ backgroundColor: paper.figures[si].placeholder, border: "1px solid #ddd", padding: "28px 16px", fontSize: "8pt", fontFamily: SANS, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 110 }}>
-                [Fig. {paper.figures[si].number} — {paper.figures[si].title}]
-              </div>
+          {figurePosition === "inline" && paper.figures[si] && (
+            <figure style={{ margin: "18px 0", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+              <JournalFigureMedia src={paper.figures[si].src} alt={`${paper.figures[si].title}. ${paper.figures[si].caption}`} placeholder={paper.figures[si].placeholder} fallbackLabel={`Figure ${paper.figures[si].number} unavailable`} />
               <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#222", marginTop: 8, lineHeight: 1.55 }}>
                 <strong style={{ color: NATURE_DARK }}>Fig. {paper.figures[si].number} | {paper.figures[si].title}</strong>
                 {" "}{paper.figures[si].caption}
               </figcaption>
             </figure>
           )}
-          {paper.tables[si] && (
-            <figure style={{ margin: "16px 0" }}>
+          {tablePosition === "inline" && paper.tables[si] && (
+            <figure style={{ margin: "16px 0", display: "flex", flexDirection: captionStyle === "above" ? "column" : "column-reverse" }}>
               <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: NATURE_DARK, fontWeight: 700, marginBottom: 5 }}>
                 Table {paper.tables[si].number} | {paper.tables[si].title}
                 {paper.tables[si].caption && <span style={{ fontWeight: 400, color: "#444" }}> {paper.tables[si].caption}</span>}
@@ -171,13 +189,24 @@ function NaturePreview({ paper, fontSize, lineSpacing }: {
           )}
         </div>
       ))}
+      {figurePosition === "end" && paper.figures.map((fig) => (
+        <figure key={`figure-${fig.id}`} style={{ margin: "18px 0", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+          <JournalFigureMedia src={fig.src} alt={`${fig.title}. ${fig.caption}`} placeholder={fig.placeholder} fallbackLabel={`Figure ${fig.number} unavailable`} />
+          <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#222", marginTop: 8, lineHeight: 1.55 }}><strong style={{ color: NATURE_DARK }}>Fig. {fig.number} | {fig.title}</strong> {fig.caption}</figcaption>
+        </figure>
+      ))}
+      {tablePosition === "end" && paper.tables.map((tbl) => (
+        <figure key={`table-${tbl.id}`} style={{ margin: "16px 0", display: "flex", flexDirection: captionStyle === "above" ? "column" : "column-reverse" }}>
+          <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: NATURE_DARK, fontWeight: 700, marginBottom: 5 }}>Table {tbl.number} | {tbl.title} <span style={{ fontWeight: 400, color: "#444" }}>{tbl.caption}</span></figcaption>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: SANS, fontSize: "8pt" }}><thead><tr>{tbl.headers.map((h, hi) => <th key={hi} style={{ borderTop: "1.5px solid #000", borderBottom: "1px solid #999", padding: "3px 8px", textAlign: hi === 0 ? "left" : "center", fontWeight: 700 }}>{h}</th>)}</tr></thead><tbody>{tbl.rows.map((row, ri) => <tr key={ri} style={{ borderBottom: ri === tbl.rows.length - 1 ? "1.5px solid #000" : "0.5px solid #e5e5e5" }}>{row.cells.map((cell, ci) => <td key={ci} style={{ padding: "3px 8px", textAlign: ci === 0 ? "left" : "center" }}>{cell}</td>)}</tr>)}</tbody></table>
+        </figure>
+      ))}
+      </JournalColumns>
 
       {/* remaining figures */}
-      {paper.figures.slice(paper.sections.length).map((fig) => (
+      {figurePosition === "inline" && paper.figures.slice(paper.sections.length).map((fig) => (
         <figure key={fig.id} style={{ margin: "18px 0" }}>
-          <div style={{ backgroundColor: fig.placeholder, border: "1px solid #ddd", padding: "28px 16px", fontSize: "8pt", fontFamily: SANS, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 110 }}>
-            [Fig. {fig.number}]
-          </div>
+          <JournalFigureMedia src={fig.src} alt={`${fig.title}. ${fig.caption}`} placeholder={fig.placeholder} fallbackLabel={`Figure ${fig.number} unavailable`} />
           <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#222", marginTop: 8, lineHeight: 1.55 }}>
             <strong style={{ color: NATURE_DARK }}>Fig. {fig.number} | {fig.title}</strong> {fig.caption}
           </figcaption>
@@ -189,12 +218,14 @@ function NaturePreview({ paper, fontSize, lineSpacing }: {
         <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "8.5pt", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.1em" }}>
           References
         </div>
-        {paper.references.map((ref, i) => (
-          <div key={i} style={{ fontFamily: SANS, fontSize: "7.5pt", lineHeight: 1.65, marginBottom: 5, color: "#333", paddingLeft: 18, position: "relative" }}>
-            <span style={{ position: "absolute", left: 0, fontWeight: 700 }}>{i + 1}.</span>
-            {ref.replace(/^\d+\.\s*/, "")}
-          </div>
-        ))}
+        <JournalColumns columns={columns}>
+          {paper.references.map((ref, i) => (
+            <div key={i} style={{ fontFamily: SANS, fontSize: "7.5pt", lineHeight: 1.65, marginBottom: 5, color: "#333", paddingLeft: 18, position: "relative" }}>
+              <span style={{ position: "absolute", left: 0, fontWeight: 700 }}>{i + 1}.</span>
+              {ref.replace(/^\d+\.\s*/, "")}
+            </div>
+          ))}
+        </JournalColumns>
       </div>
 
       {/* ── FOOTER ── */}
@@ -239,6 +270,14 @@ export function NaturePage() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [fontSize, setFontSize] = useState(NATURE_DEMO.fontSize);
   const [lineSpacing, setLineSpacing] = useState(NATURE_DEMO.lineSpacing);
+  const [columns, setColumns] = useState<1 | 2>(1);
+  const [marginSize, setMarginSize] = useState<MarginSize>("normal");
+  const [pageSize, setPageSize] = useState<PageSize>("a4");
+  const [fontFamily, setFontFamily] = useState<FontFamily>("times");
+  const [headingStyle, setHeadingStyle] = useState<HeadingStyle>("bold");
+  const [figurePosition, setFigurePosition] = useState<FigurePosition>("inline");
+  const [tablePosition, setTablePosition] = useState<FigurePosition>("inline");
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("below");
 
   const set = (patch: Partial<NaturePaperData>) => setPaper((p) => ({ ...p, ...patch }));
 
@@ -270,7 +309,7 @@ export function NaturePage() {
   };
 
   const exportXML = () => {
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="${paper.articleType.toLowerCase()}">\n  <front>\n    <journal-meta>\n      <journal-title-group><journal-title>${paper.journal}</journal-title></journal-title-group>\n      <publisher><publisher-name>Springer Nature</publisher-name></publisher>\n    </journal-meta>\n    <article-meta>\n      <title-group><article-title>${paper.title}</article-title></title-group>\n      <pub-date pub-type="epub"><year>${paper.year}</year></pub-date>\n      <volume>${paper.volume}</volume>\n      <issue>${paper.issue}</issue>\n      <fpage>${paper.pages.split("–")[0]}</fpage>\n      <lpage>${paper.pages.split("–")[1] ?? paper.pages}</lpage>\n      <abstract><p>${paper.abstract}</p></abstract>\n    </article-meta>\n  </front>\n</article>`;
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="${escapeXml(paper.articleType.toLowerCase())}">\n  <front>\n    <journal-meta>\n      <journal-title-group><journal-title>${escapeXml(paper.journal)}</journal-title></journal-title-group>\n      <publisher><publisher-name>Springer Nature</publisher-name></publisher>\n    </journal-meta>\n    <article-meta>\n      <title-group><article-title>${escapeXml(paper.title)}</article-title></title-group>\n      <pub-date pub-type="epub"><year>${escapeXml(paper.year)}</year></pub-date>\n      <volume>${escapeXml(paper.volume)}</volume>\n      <issue>${escapeXml(paper.issue)}</issue>\n      <fpage>${escapeXml(paper.pages.split("–")[0])}</fpage>\n      <lpage>${escapeXml(paper.pages.split("–")[1] ?? paper.pages)}</lpage>\n      <abstract><p>${escapeXml(paper.abstract)}</p></abstract>\n    </article-meta>\n  </front>\n</article>`;
     const blob = new Blob([xml], { type: "application/xml" });
     Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "nature-article.xml" }).click();
   };
@@ -377,9 +416,10 @@ export function NaturePage() {
           </div>
           <FieldInput label="Short title" value={fig.title} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, title: v }; set({ figures }); }} />
           <FieldTextarea label="Full caption" value={fig.caption} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, caption: v }; set({ figures }); }} rows={3} />
+          <FieldInput label="Image URL" value={fig.src || ""} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, src: v }; set({ figures }); }} mono />
         </div>
       ))}
-      <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, title: "", caption: "", placeholder: "#fce7f3" }] })}
+      <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, title: "", caption: "", placeholder: "#fce7f3", src: "" }] })}
         style={{ fontFamily: SANS, fontSize: "0.72rem", display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", border: `1px solid ${BORDER}`, borderRadius: 3, backgroundColor: PANEL_BG, color: TEXT, cursor: "pointer", marginBottom: 16 }}>
         <Plus size={12} /> Add Figure
       </button>
@@ -463,18 +503,18 @@ export function NaturePage() {
     <div>
       <ChoiceRow label="Columns"
         options={[{ value: "1", label: "1 Column (Nature)" }, { value: "2", label: "2 Columns" }]}
-        value="1"
-        onChange={() => {}}
+        value={String(columns)}
+        onChange={(v) => setColumns(Number(v) as 1 | 2)}
       />
       <ChoiceRow label="Margins"
         options={[{ value: "narrow", label: "Narrow" }, { value: "normal", label: "Normal" }, { value: "wide", label: "Wide" }]}
-        value="normal"
-        onChange={() => {}}
+        value={marginSize}
+        onChange={(v) => setMarginSize(v as MarginSize)}
       />
       <ChoiceRow label="Page size"
         options={[{ value: "a4", label: "A4" }, { value: "letter", label: "Letter" }]}
-        value="a4"
-        onChange={() => {}}
+        value={pageSize}
+        onChange={(v) => setPageSize(v as PageSize)}
       />
     </div>
   );
@@ -483,8 +523,8 @@ export function NaturePage() {
     <div>
       <ChoiceRow label="Font family"
         options={[{ value: "times", label: "Times New Roman" }, { value: "harding", label: "Harding (Nature)" }, { value: "georgia", label: "Georgia" }]}
-        value="times"
-        onChange={() => {}}
+        value={fontFamily}
+        onChange={(v) => setFontFamily(v as FontFamily)}
       />
       <SliderField label="Font size" value={fontSize} min={8} max={13} step={0.5} unit="pt" onChange={setFontSize} />
       <SliderField label="Line spacing" value={lineSpacing} min={1} max={2} step={0.05} onChange={setLineSpacing} />
@@ -500,8 +540,8 @@ export function NaturePage() {
       />
       <ChoiceRow label="Heading style"
         options={[{ value: "bold", label: "Bold" }, { value: "italic", label: "Italic Bold" }]}
-        value="bold"
-        onChange={() => {}}
+        value={headingStyle}
+        onChange={(v) => setHeadingStyle(v as HeadingStyle)}
       />
     </div>
   );
@@ -510,18 +550,18 @@ export function NaturePage() {
     <div>
       <ChoiceRow label="Figure position"
         options={[{ value: "inline", label: "Inline" }, { value: "end", label: "End of paper" }]}
-        value="inline"
-        onChange={() => {}}
+        value={figurePosition}
+        onChange={(v) => setFigurePosition(v as FigurePosition)}
       />
       <ChoiceRow label="Table position"
         options={[{ value: "inline", label: "Inline" }, { value: "end", label: "End of paper" }]}
-        value="inline"
-        onChange={() => {}}
+        value={tablePosition}
+        onChange={(v) => setTablePosition(v as FigurePosition)}
       />
       <ChoiceRow label="Caption style"
         options={[{ value: "below", label: "Below (Fig. N | title)" }, { value: "above", label: "Above item" }]}
-        value="below"
-        onChange={() => {}}
+        value={captionStyle}
+        onChange={(v) => setCaptionStyle(v as CaptionStyle)}
       />
     </div>
   );
@@ -573,9 +613,10 @@ export function NaturePage() {
       <JournalEditorShell
         uiLang={ui}
         journal={{ name: "Nature", abbrev: "Nature", publisher: "Springer Nature", accentColor: NATURE_RED, type: "nature" }}
+        pageLayout={getJournalPageLayout("nature", pageSize)}
         actions={{ onExportPDF: () => window.print(), onExportWord: exportWord, onUpload: handleUpload }}
         tabContent={{ metadata: metadataPanel, content: contentPanel, figures: figuresPanel, references: referencesPanel, layout: layoutTabPanel, export: exportTabPanel }}
-        preview={<NaturePreview paper={paper} fontSize={fontSize} lineSpacing={lineSpacing} />}
+        preview={<NaturePreview paper={paper} fontSize={fontSize} lineSpacing={lineSpacing} columns={columns} marginSize={marginSize} pageSize={pageSize} fontFamily={fontFamily} headingStyle={headingStyle} figurePosition={figurePosition} tablePosition={tablePosition} captionStyle={captionStyle} />}
         rightPanelSections={{ layout: rpLayout, typography: rpTypography, contentStyle: rpContentStyle, figuresTables: rpFiguresTables, export: rpExport, documentInfo: rpDocumentInfo }}
         langToggle={{ lang, onChange: setLang }}
       />

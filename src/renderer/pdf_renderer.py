@@ -208,10 +208,13 @@ class PDFRenderer:
         data URI，因此即使渲染器运行在独立进程中也不会丢图。
         """
         if _HAS_WEASYPRINT:
-            html = HTML(string=html_content, base_url=base_url)
-            css = CSS(filename=self.css_path) if os.path.exists(self.css_path) else None
-            doc = html.render(stylesheets=[css] if css else [])
-            return doc.write_pdf()
+            try:
+                html = HTML(string=html_content, base_url=base_url)
+                css = CSS(filename=self.css_path) if os.path.exists(self.css_path) else None
+                doc = html.render(stylesheets=[css] if css else [])
+                return doc.write_pdf()
+            except Exception as e:
+                logger.warning("WeasyPrint 运行失败(%s)，回退到 Chrome headless", e)
         # Chrome 回退：写临时文件再读回
         with tempfile.TemporaryDirectory(prefix="jats2pdf_") as td:
             tmp_pdf = os.path.join(td, "out.pdf")

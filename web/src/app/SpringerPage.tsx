@@ -2,10 +2,19 @@ import React, { useState } from "react";
 import { Plus, Trash2, ChevronDown, ChevronRight, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useI18n, ContentLangToggle } from "./i18n";
 import { SPRINGER_DEMO, type SpringerPaperData, type SpringerSection } from "./demoSpringer";
+import { JournalFigureMedia } from "./JournalFigureMedia";
+import { escapeXml } from "./xml";
 import {
-  JournalEditorShell, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
+  JournalEditorShell, JournalColumns, getJournalPageLayout, SERIF, SANS, MONO, MUTED, BORDER, TEXT, PANEL_BG,
   FieldInput, FieldTextarea, SectionLabel, SliderField, ChoiceRow, ExportPanel,
 } from "./shell/JournalEditorShell";
+
+type MarginSize = "narrow" | "normal" | "wide";
+type PageSize = "a4" | "letter";
+type FontFamily = "times" | "minion" | "charter";
+type HeadingStyle = "bold" | "italic";
+type FigurePosition = "inline" | "top" | "bottom";
+type CaptionStyle = "below" | "above";
 
 /* ═══════════════════════════════════════════════════════════════════════
    SPRINGER PAPER PREVIEW
@@ -13,13 +22,23 @@ import {
 const SPRINGER_BLUE = "#1565c0";
 const SPRINGER_BLUE_LIGHT = "#e3f2fd";
 
-function SpringerPreview({ paper, fontSize, lineSpacing }: {
+function SpringerPreview({ paper, fontSize, lineSpacing, columns, marginSize, pageSize, fontFamily, headingStyle, figurePosition, tablePosition, captionStyle }: {
   paper: SpringerPaperData;
   fontSize: number;
   lineSpacing: number;
+  columns: 1 | 2;
+  marginSize: MarginSize;
+  pageSize: PageSize;
+  fontFamily: FontFamily;
+  headingStyle: HeadingStyle;
+  figurePosition: FigurePosition;
+  tablePosition: FigurePosition;
+  captionStyle: CaptionStyle;
 }) {
+  const fontFamilyCss = fontFamily === "minion" ? "'Minion Pro', Georgia, serif" : fontFamily === "charter" ? "Charter, Georgia, serif" : SERIF;
+  const marginPx = marginSize === "narrow" ? 32 : marginSize === "wide" ? 68 : 52;
   return (
-    <div id="springer-preview-root" style={{ fontFamily: SERIF, fontSize: `${fontSize}pt`, lineHeight: lineSpacing, color: "#111", backgroundColor: "#fff", padding: "40px 52px 48px" }}>
+    <div id="springer-preview-root" style={{ fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, lineHeight: lineSpacing, color: "#111", backgroundColor: "#fff", padding: `40px ${marginPx}px 48px`, minHeight: pageSize === "a4" ? 1120 : 1056, boxSizing: "border-box" }}>
 
       {/* ── TOP RULE + JOURNAL IDENTITY ── */}
       <div style={{ borderTop: `3px solid ${SPRINGER_BLUE}`, marginBottom: 14 }}>
@@ -94,7 +113,7 @@ function SpringerPreview({ paper, fontSize, lineSpacing }: {
         <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "8pt", color: SPRINGER_BLUE, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           Abstract
         </div>
-        <p style={{ margin: "0 0 8px", fontFamily: SERIF, fontSize: `${fontSize}pt`, textAlign: "justify", lineHeight: lineSpacing }}>
+        <p style={{ margin: "0 0 8px", fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, textAlign: "justify", lineHeight: lineSpacing }}>
           {paper.abstract}
         </p>
         <div style={{ fontFamily: SANS, fontSize: "7.5pt", color: "#444", marginTop: 6 }}>
@@ -111,29 +130,28 @@ function SpringerPreview({ paper, fontSize, lineSpacing }: {
       {/* ── DIVIDER ── */}
       <div style={{ borderTop: "1px solid #bbb", marginBottom: 14 }} />
 
-      {/* ── BODY SECTIONS (single column) ── */}
+      {/* ── BODY SECTIONS ── */}
+      <JournalColumns columns={columns}>
       {paper.sections.map((sec, si) => (
         <div key={sec.id} style={{ marginBottom: "1em" }}>
-          <h2 style={{ fontFamily: SANS, fontWeight: 700, fontSize: `${fontSize + 0.5}pt`, color: "#111", margin: "16px 0 6px" }}>
+          <h2 style={{ fontFamily: SANS, fontWeight: headingStyle === "italic" ? 600 : 700, fontStyle: headingStyle === "italic" ? "italic" : "normal", fontSize: `${fontSize + 0.5}pt`, color: "#111", margin: "16px 0 6px" }}>
             {sec.number} {sec.title}
           </h2>
           {sec.content.split("\n\n").filter(Boolean).map((para, pi) => (
-            <p key={pi} style={{ margin: "0 0 7px", textAlign: "justify", fontFamily: SERIF, fontSize: `${fontSize}pt`, lineHeight: lineSpacing }}>
+            <p key={pi} style={{ margin: "0 0 7px", textAlign: "justify", fontFamily: fontFamilyCss, fontSize: `${fontSize}pt`, lineHeight: lineSpacing }}>
               {para.trim()}
             </p>
           ))}
-          {paper.figures[si] && (
-            <figure style={{ margin: "14px 0", textAlign: "center" }}>
-              <div style={{ backgroundColor: paper.figures[si].placeholder, border: "1px solid #ddd", padding: "24px 16px", fontSize: "8pt", fontFamily: SANS, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 96 }}>
-                [Fig. {paper.figures[si].number}]
-              </div>
+          {figurePosition === "inline" && paper.figures[si] && (
+            <figure style={{ margin: "14px 0", textAlign: "center", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+              <JournalFigureMedia src={paper.figures[si].src} alt={paper.figures[si].caption} placeholder={paper.figures[si].placeholder} fallbackLabel={`Figure ${paper.figures[si].number} unavailable`} />
               <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#444", marginTop: 6, lineHeight: 1.5, textAlign: "left" }}>
                 <strong style={{ color: "#000" }}>Fig. {paper.figures[si].number}</strong> {paper.figures[si].caption}
               </figcaption>
             </figure>
           )}
-          {paper.tables[si] && (
-            <figure style={{ margin: "14px 0" }}>
+          {tablePosition === "inline" && paper.tables[si] && (
+            <figure style={{ margin: "14px 0", display: "flex", flexDirection: captionStyle === "above" ? "column" : "column-reverse" }}>
               <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#000", fontWeight: 700, marginBottom: 5 }}>
                 Table {paper.tables[si].number} <span style={{ fontWeight: 400, color: "#444" }}>{paper.tables[si].caption}</span>
               </figcaption>
@@ -163,11 +181,24 @@ function SpringerPreview({ paper, fontSize, lineSpacing }: {
           )}
         </div>
       ))}
+      {(figurePosition !== "inline") && paper.figures.map((fig) => (
+        <figure key={`figure-${fig.id}`} style={{ margin: "14px 0", textAlign: "center", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+          <JournalFigureMedia src={fig.src} alt={fig.caption} placeholder={fig.placeholder} fallbackLabel={`Figure ${fig.number} unavailable`} />
+          <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#444", marginTop: 6, lineHeight: 1.5, textAlign: "left" }}><strong style={{ color: "#000" }}>Fig. {fig.number}</strong> {fig.caption}</figcaption>
+        </figure>
+      ))}
+      {tablePosition !== "inline" && paper.tables.map((tbl) => (
+        <figure key={`table-${tbl.id}`} style={{ margin: "14px 0", display: "flex", flexDirection: captionStyle === "above" ? "column" : "column-reverse" }}>
+          <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#000", fontWeight: 700, marginBottom: 5 }}>Table {tbl.number} <span style={{ fontWeight: 400, color: "#444" }}>{tbl.caption}</span></figcaption>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: SANS, fontSize: "8pt" }}><thead><tr>{tbl.headers.map((h, hi) => <th key={hi} style={{ borderTop: "1.5px solid #000", borderBottom: "1px solid #999", padding: "3px 8px", textAlign: hi === 0 ? "left" : "center", fontWeight: 700 }}>{h}</th>)}</tr></thead><tbody>{tbl.rows.map((row, ri) => <tr key={ri} style={{ borderBottom: ri === tbl.rows.length - 1 ? "1.5px solid #000" : "0.5px solid #ddd" }}>{row.cells.map((cell, ci) => <td key={ci} style={{ padding: "3px 8px", textAlign: ci === 0 ? "left" : "center" }}>{cell}</td>)}</tr>)}</tbody></table>
+        </figure>
+      ))}
+      </JournalColumns>
 
       {/* remaining figures */}
-      {paper.figures.slice(paper.sections.length).map((fig) => (
-        <figure key={fig.id} style={{ margin: "14px 0", textAlign: "center" }}>
-          <div style={{ backgroundColor: fig.placeholder, border: "1px solid #ddd", padding: "24px 16px", fontSize: "8pt", fontFamily: SANS, color: "#666", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 96 }}>[Fig. {fig.number}]</div>
+      {figurePosition === "inline" && paper.figures.slice(paper.sections.length).map((fig) => (
+        <figure key={fig.id} style={{ margin: "14px 0", textAlign: "center", display: "flex", flexDirection: captionStyle === "above" ? "column-reverse" : "column" }}>
+          <JournalFigureMedia src={fig.src} alt={fig.caption} placeholder={fig.placeholder} fallbackLabel={`Figure ${fig.number} unavailable`} />
           <figcaption style={{ fontFamily: SANS, fontSize: "8pt", color: "#444", marginTop: 6, lineHeight: 1.5, textAlign: "left" }}>
             <strong style={{ color: "#000" }}>Fig. {fig.number}</strong> {fig.caption}
           </figcaption>
@@ -179,11 +210,14 @@ function SpringerPreview({ paper, fontSize, lineSpacing }: {
         <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: "9pt", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           References
         </div>
-        <ol style={{ margin: 0, paddingLeft: 20, fontFamily: SANS, fontSize: "8pt", lineHeight: 1.65, color: "#333", listStyleType: "decimal" }}>
+        <JournalColumns columns={columns}>
           {paper.references.map((ref, i) => (
-            <li key={i} style={{ marginBottom: 4 }}>{ref}</li>
+            <div key={i} style={{ fontFamily: SANS, fontSize: "8pt", lineHeight: 1.65, color: "#333", marginBottom: 4, paddingLeft: 18, position: "relative" }}>
+              <span style={{ position: "absolute", left: 0, fontWeight: 700 }}>{i + 1}.</span>
+              {paper.citationStyle === "APA" ? ref.replace(/^\s*\[?\d+\]?\.?\s*/, "") : paper.citationStyle === "Vancouver" ? `${i + 1}. ${ref.replace(/^\s*\[?\d+\]?\.?\s*/, "")}` : ref}
+            </div>
           ))}
-        </ol>
+        </JournalColumns>
       </div>
 
       {/* ── FOOTER ── */}
@@ -231,6 +265,14 @@ export function SpringerPage() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [fontSize, setFontSize] = useState(SPRINGER_DEMO.fontSize);
   const [lineSpacing, setLineSpacing] = useState(SPRINGER_DEMO.lineSpacing);
+  const [columns, setColumns] = useState<1 | 2>(1);
+  const [marginSize, setMarginSize] = useState<MarginSize>("normal");
+  const [pageSize, setPageSize] = useState<PageSize>("a4");
+  const [fontFamily, setFontFamily] = useState<FontFamily>("times");
+  const [headingStyle, setHeadingStyle] = useState<HeadingStyle>("bold");
+  const [figurePosition, setFigurePosition] = useState<FigurePosition>("inline");
+  const [tablePosition, setTablePosition] = useState<FigurePosition>("inline");
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>("below");
 
   const set = (patch: Partial<SpringerPaperData>) => setPaper((p) => ({ ...p, ...patch }));
 
@@ -262,7 +304,7 @@ export function SpringerPage() {
   };
 
   const exportXML = () => {
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="${paper.articleType.toLowerCase().replace(" ", "-")}">\n  <front>\n    <journal-meta>\n      <journal-title-group><journal-title>${paper.journal}</journal-title><abbrev-journal-title abbrev-type="publisher">${paper.journalAbbrev}</abbrev-journal-title></journal-title-group>\n      <issn pub-type="ppub">${paper.issn}</issn>\n      <publisher><publisher-name>${paper.publisher}</publisher-name></publisher>\n    </journal-meta>\n    <article-meta>\n      <title-group><article-title>${paper.title}</article-title></title-group>\n      <pub-date pub-type="epub"><year>${paper.year}</year></pub-date>\n      <volume>${paper.volume}</volume>\n      <issue>${paper.issue}</issue>\n      <fpage>${paper.pages.split("–")[0]}</fpage>\n      <lpage>${paper.pages.split("–")[1] ?? paper.pages}</lpage>\n      <abstract><p>${paper.abstract}</p></abstract>\n      <kwd-group>${paper.keywords.map((k) => `<kwd>${k}</kwd>`).join("")}</kwd-group>\n    </article-meta>\n  </front>\n</article>`;
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="${escapeXml(paper.articleType.toLowerCase().replace(" ", "-"))}">\n  <front>\n    <journal-meta>\n      <journal-title-group><journal-title>${escapeXml(paper.journal)}</journal-title><abbrev-journal-title abbrev-type="publisher">${escapeXml(paper.journalAbbrev)}</abbrev-journal-title></journal-title-group>\n      <issn pub-type="ppub">${escapeXml(paper.issn)}</issn>\n      <publisher><publisher-name>${escapeXml(paper.publisher)}</publisher-name></publisher>\n    </journal-meta>\n    <article-meta>\n      <title-group><article-title>${escapeXml(paper.title)}</article-title></title-group>\n      <pub-date pub-type="epub"><year>${escapeXml(paper.year)}</year></pub-date>\n      <volume>${escapeXml(paper.volume)}</volume>\n      <issue>${escapeXml(paper.issue)}</issue>\n      <fpage>${escapeXml(paper.pages.split("–")[0])}</fpage>\n      <lpage>${escapeXml(paper.pages.split("–")[1] ?? paper.pages)}</lpage>\n      <abstract><p>${escapeXml(paper.abstract)}</p></abstract>\n      <kwd-group>${paper.keywords.map((k) => `<kwd>${escapeXml(k)}</kwd>`).join("")}</kwd-group>\n    </article-meta>\n  </front>\n</article>`;
     const blob = new Blob([xml], { type: "application/xml" });
     Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "springer-article.xml" }).click();
   };
@@ -370,9 +412,10 @@ export function SpringerPage() {
             <button onClick={() => set({ figures: paper.figures.filter((_, j) => j !== i) })} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444" }}><Trash2 size={11} /></button>
           </div>
           <FieldTextarea label="Caption" value={fig.caption} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, caption: v }; set({ figures }); }} rows={3} />
+          <FieldInput label="Image URL" value={fig.src || ""} onChange={(v) => { const figures = [...paper.figures]; figures[i] = { ...fig, src: v }; set({ figures }); }} mono />
         </div>
       ))}
-      <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, caption: "", placeholder: "#e3f2fd" }] })}
+      <button onClick={() => set({ figures: [...paper.figures, { id: `f${Date.now()}`, number: paper.figures.length + 1, caption: "", placeholder: "#e3f2fd", src: "" }] })}
         style={{ fontFamily: SANS, fontSize: "0.72rem", display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", border: `1px solid ${BORDER}`, borderRadius: 3, backgroundColor: PANEL_BG, color: TEXT, cursor: "pointer", marginBottom: 16 }}>
         <Plus size={12} /> Add Figure
       </button>
@@ -455,18 +498,18 @@ export function SpringerPage() {
     <div>
       <ChoiceRow label="Columns"
         options={[{ value: "1", label: "1 Column (Springer)" }, { value: "2", label: "2 Columns" }]}
-        value="1"
-        onChange={() => {}}
+        value={String(columns)}
+        onChange={(v) => setColumns(Number(v) as 1 | 2)}
       />
       <ChoiceRow label="Margins"
         options={[{ value: "narrow", label: "Narrow" }, { value: "normal", label: "Normal" }, { value: "wide", label: "Wide" }]}
-        value="normal"
-        onChange={() => {}}
+        value={marginSize}
+        onChange={(v) => setMarginSize(v as MarginSize)}
       />
       <ChoiceRow label="Page size"
         options={[{ value: "a4", label: "A4" }, { value: "letter", label: "Letter" }]}
-        value="a4"
-        onChange={() => {}}
+        value={pageSize}
+        onChange={(v) => setPageSize(v as PageSize)}
       />
     </div>
   );
@@ -475,8 +518,8 @@ export function SpringerPage() {
     <div>
       <ChoiceRow label="Font family"
         options={[{ value: "times", label: "Times New Roman" }, { value: "minion", label: "Minion Pro" }, { value: "charter", label: "Charter" }]}
-        value="times"
-        onChange={() => {}}
+        value={fontFamily}
+        onChange={(v) => setFontFamily(v as FontFamily)}
       />
       <SliderField label="Font size" value={fontSize} min={8} max={13} step={0.5} unit="pt" onChange={setFontSize} />
       <SliderField label="Line spacing" value={lineSpacing} min={1} max={2} step={0.05} onChange={setLineSpacing} />
@@ -492,8 +535,8 @@ export function SpringerPage() {
       />
       <ChoiceRow label="Heading style"
         options={[{ value: "bold", label: "Bold" }, { value: "italic", label: "Italic Bold" }]}
-        value="bold"
-        onChange={() => {}}
+        value={headingStyle}
+        onChange={(v) => setHeadingStyle(v as HeadingStyle)}
       />
     </div>
   );
@@ -502,18 +545,18 @@ export function SpringerPage() {
     <div>
       <ChoiceRow label="Figure position"
         options={[{ value: "inline", label: "Inline" }, { value: "top", label: "Top of page" }, { value: "bottom", label: "Bottom" }]}
-        value="inline"
-        onChange={() => {}}
+        value={figurePosition}
+        onChange={(v) => setFigurePosition(v as FigurePosition)}
       />
       <ChoiceRow label="Table position"
         options={[{ value: "inline", label: "Inline" }, { value: "top", label: "Top of page" }, { value: "bottom", label: "Bottom" }]}
-        value="inline"
-        onChange={() => {}}
+        value={tablePosition}
+        onChange={(v) => setTablePosition(v as FigurePosition)}
       />
       <ChoiceRow label="Caption style"
         options={[{ value: "below", label: "Below item" }, { value: "above", label: "Above item" }]}
-        value="below"
-        onChange={() => {}}
+        value={captionStyle}
+        onChange={(v) => setCaptionStyle(v as CaptionStyle)}
       />
     </div>
   );
@@ -565,9 +608,10 @@ export function SpringerPage() {
       <JournalEditorShell
         uiLang={ui}
         journal={{ name: "Machine Learning", abbrev: "Mach Learn", publisher: "Springer", accentColor: SPRINGER_BLUE, type: "springer" }}
+        pageLayout={getJournalPageLayout("springer", pageSize)}
         actions={{ onExportPDF: () => window.print(), onExportWord: exportWord, onUpload: handleUpload }}
         tabContent={{ metadata: metadataPanel, content: contentPanel, figures: figuresPanel, references: referencesPanel, layout: layoutTabPanel, export: exportTabPanel }}
-        preview={<SpringerPreview paper={paper} fontSize={fontSize} lineSpacing={lineSpacing} />}
+        preview={<SpringerPreview paper={paper} fontSize={fontSize} lineSpacing={lineSpacing} columns={columns} marginSize={marginSize} pageSize={pageSize} fontFamily={fontFamily} headingStyle={headingStyle} figurePosition={figurePosition} tablePosition={tablePosition} captionStyle={captionStyle} />}
         rightPanelSections={{ layout: rpLayout, typography: rpTypography, contentStyle: rpContentStyle, figuresTables: rpFiguresTables, export: rpExport, documentInfo: rpDocumentInfo }}
         langToggle={{ lang, onChange: setLang }}
       />

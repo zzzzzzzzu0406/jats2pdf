@@ -77,7 +77,7 @@
   </aside>
 
   <!-- 正文区（双栏 multicol 容器；图表/公式/摘要等跨栏元素须为本容器直接子元素） -->
-  <main class="layout-main article-content font-style-{{ font_style }} font-size-{{ font_size }}">
+  <main class="layout-main article-content font-style-{{ font_style }} font-size-{{ font_size }}" style="--article-body-size: {{ font_size_px or '14px' }}">
 
     <header class="article-header">
       {% if article.journal %}
@@ -165,7 +165,7 @@
     {% macro render_figure(fig) %}
 <figure class="figure" id="{{ fig.id or 'fig-' ~ fig.number }}">
   {% set image_src = fig.graphic_href | resolve_image %}
-  {% if image_src %}<img src="{{ image_src }}" alt="{{ fig.caption }}" loading="lazy">{% endif %}
+  {% if image_src %}<img src="{{ image_src }}" alt="{{ fig.caption }}" loading="eager">{% endif %}
   <figcaption><span class="fig-label">{{ fig.label }}</span>&ensp;{{ fig.caption }}</figcaption>
 </figure>
     {% endmacro %}

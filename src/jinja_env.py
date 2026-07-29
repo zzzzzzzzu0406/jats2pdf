@@ -59,13 +59,15 @@ def get_jinja_env() -> Environment:
         asset_base = context.get("asset_base")
         if asset_mode == "local" and asset_base:
             base = Path(asset_base).resolve()
-            candidate = (base / href).resolve()
+            local_href = urllib.parse.unquote(urllib.parse.urlparse(href).path)
+            candidate = (base / local_href).resolve()
             if candidate.is_file() and (candidate == base or base in candidate.parents):
                 return candidate.as_uri()
             return href
 
         # Web 模式：/api/files/{basename}?...（默认）
-        safe = os.path.basename(href)
+        image_path = urllib.parse.urlparse(href).path
+        safe = urllib.parse.quote(os.path.basename(urllib.parse.unquote(image_path)), safe="")
         if safe:
             article = context.get("article")
             pmcid = str(getattr(article, "pmcid", "") or "").upper()
